@@ -1,0 +1,28 @@
+# Contributor: beingmeta repository manager <repoman@beingmeta.com>
+# Maintainer: beingmeta repository manager <repoman@beingmeta.com>
+pkgname=kno-rocksdb
+pkgver=$(knoconfig major).$(knoconfig minor).$(cat ../../etc/release)
+pkgrel=18
+pkgdesc="RocksDB bindings for KNO"
+url="https://kno.so/"
+arch="all"
+license="GPLV3"
+depends=""
+makedepends="kno"
+install=""
+#subpackages="$pkgname-dev $pkgname-doc"
+subpackages=""
+source="kno-rocksdb.tar"
+builddir="${srcdir}/kno-rocksdb"
+
+build() {
+	make -j
+}
+
+check() {
+	make
+}
+
+package() {
+	make DESTDIR="$pkgdir" SUDO= install
+}
