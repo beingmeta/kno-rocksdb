@@ -35,7 +35,7 @@
 #include <libu8/u8crypto.h>
 
 #include "rocksdb/c.h"
-#include "kno/rocksdb.h"
+#include "rocksdb.h"
 
 
 kno_lisp_type kno_rocksdb_type;
