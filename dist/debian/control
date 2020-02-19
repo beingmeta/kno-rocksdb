@@ -9,6 +9,6 @@ Homepage: http://www.beingmeta.com/
 Package: kno-rocksdb
 Section: libdevel
 Architecture: any
-Depends: kno-core, librocksdb
+Depends: kno-core, librocksdb | librocksdb5.8 | librocksdb5.17
 Description: ODBC module for KNO
 
