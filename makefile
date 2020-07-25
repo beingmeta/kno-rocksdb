@@ -49,7 +49,6 @@ rocksdb.o: rocksdb.c makefile
 	@$(MSG) CC "(ROCKSDB)" $@
 rocksdb.so: rocksdb.o
 	@$(MKSO) $(LDFLAGS) -o $@ rocksdb.o ${LDFLAGS}
-	@if test ! -z "${COPY_CMODS}"; then cp $@ ${COPY_CMODS}; fi;
 	@$(MSG) MKSO  $@ $<
 	@ln -sf $(@F) $(@D)/$(@F).${KNO_MAJOR}
 rocksdb.dylib: rocksdb.c makefile
@@ -57,7 +56,6 @@ rocksdb.dylib: rocksdb.c makefile
 		`basename $(@F) .dylib`.${KNO_MAJOR}.dylib \
 		${CFLAGS} ${LDFLAGS} -o $@ $(DYLIB_FLAGS) \
 		rocksdb.c
-	@if test ! -z "${COPY_CMODS}"; then cp $@ ${COPY_CMODS}; fi;
 	@$(MSG) MACLIBTOOL  $@ $<
 
 TAGS: rocksdb.c
