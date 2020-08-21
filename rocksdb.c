@@ -1265,7 +1265,7 @@ kno_index kno_open_rocksdb_index(u8_string path,kno_storage_flags flags,lispval 
     if (KNO_VOIDP(metadata)) {}
     else if (KNO_SLOTMAPP(metadata)) {}
     else u8_log(LOG_WARN,"Rocksdb/Index/BadMetadata",
-		"Bad metadata for level db index %s: %q",path,metadata);
+		"Bad metadata for RocksDB index %s: %q",path,metadata);
 
     kno_decref(label);
     kno_decref(metadata);
