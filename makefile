@@ -1,5 +1,6 @@
 KNOCONFIG         = knoconfig
 KNOBUILD          = knobuild
+XCFLAGS		  =
 
 prefix		::= $(shell ${KNOCONFIG} prefix)
 libsuffix	::= $(shell ${KNOCONFIG} libsuffix)
@@ -27,8 +28,8 @@ KNO_LDFLAGS	::= -fPIC $(shell ${KNOCONFIG} ldflags)
 ROCKSDB_CFLAGS  ::= 
 ROCKSDB_LDFLAGS ::= -lrocksdb
 
-CFLAGS		  = ${INIT_CFLAGS} ${KNO_CFLAGS}  ${ROCKSDB_CFLAGS} 
-LDFLAGS		  = ${INIT_LDFLAGS} ${KNO_LDFLAGS} ${ROCKSDB_LDFLAGS} 
+CFLAGS		  = ${INIT_CFLAGS} ${KNO_CFLAGS}  ${ROCKSDB_CFLAGS} ${XCFLAGS}
+LDFLAGS		  = ${INIT_LDFLAGS} ${KNO_LDFLAGS} ${ROCKSDB_LDFLAGS} ${XLDFLAGS}
 MKSO		  = $(CC) -shared $(CFLAGS) $(LDFLAGS) $(LIBS)
 SYSINSTALL        = /usr/bin/install -c
 MSG		  = echo
@@ -42,17 +43,35 @@ ARCH            ::= $(shell ${KNOBUILD} getbuildopt BUILD_ARCH || uname -m)
 APKREPO         ::= $(shell ${KNOBUILD} getbuildopt APKREPO /srv/repo/kno/apk)
 APK_ARCH_DIR      = ${APKREPO}/staging/${ARCH}
 
-default build: ${PKG_NAME}.${libsuffix}
+default build: .buildmode
+	make $(shell cat .buildmode)
 
-rocksdb.o: rocksdb.c makefile
+module: ${PKG_NAME}.${libsuffix}
+
+standard:
+	make module
+debugging:
+	make XCFLAGS="-O0 -g3" module
+
+.buildmode:
+	echo standard > .buildmode
+
+debug:
+	echo debugging > .buildmode
+	make
+normal:
+	echo standard > .buildmode
+	make
+
+rocksdb.o: rocksdb.c makefile .buildmode
 	@$(CC) $(CFLAGS) -o $@ -c $<
 	@$(MSG) CC "(ROCKSDB)" $@
-rocksdb.so: rocksdb.o
+rocksdb.so: rocksdb.o makefile .buildmode
 	@$(MKSO) $(LDFLAGS) -o $@ rocksdb.o ${LDFLAGS}
 	@if test ! -z "${COPY_CMODS}"; then cp $@ ${COPY_CMODS}; fi;
 	@$(MSG) MKSO  $@ $<
 	@ln -sf $(@F) $(@D)/$(@F).${KNO_MAJOR}
-rocksdb.dylib: rocksdb.c makefile
+rocksdb.dylib: rocksdb.c makefile .buildmode
 	@$(MACLIBTOOL) -install_name \
 		`basename $(@F) .dylib`.${KNO_MAJOR}.dylib \
 		${CFLAGS} ${LDFLAGS} -o $@ $(DYLIB_FLAGS) \
@@ -86,7 +105,7 @@ install: build ${CMODULES}
 	@echo === Linked ${CMODULES}/${PKG_NAME}.so to ${PKG_NAME}.so.${FULL_VERSION}
 
 clean:
-	rm -f *.o *.${libsuffix}
+	rm -f *.o *.${libsuffix} .buildmode
 fresh:
 	make clean
 	make default
