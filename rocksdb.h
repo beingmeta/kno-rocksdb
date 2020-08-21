@@ -10,6 +10,7 @@ typedef struct KNO_ROCKSDB {
     rocksdb_closing,
     rocksdb_error } dbstatus;
   struct XTYPE_REFS xrefs;
+  int saved_xrefs;
   U8_MUTEX_DECL(rocksdb_lock);
   struct rocksdb_t *dbptr;
   struct rocksdb_options_t *optionsptr;

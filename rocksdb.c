@@ -39,6 +39,8 @@
 
 
 kno_lisp_type kno_rocksdb_type;
+u8_condition RocksDB_Error = "RocksDB/Error";
+
 
 static ssize_t default_writebuf_size = -1;
 static ssize_t default_cache_size = -1;
@@ -94,7 +96,7 @@ static lispval get_prop(rocksdb_t *dbptr,char *key,lispval dflt)
     u8_free(buf);
     return result;}
   else if (errmsg)
-    return kno_err("Rocksdberror","get_prop",NULL,KNO_VOID);
+    return kno_err(RocksDB_Error,"get_prop",NULL,KNO_VOID);
   else return dflt;
 }
 
@@ -110,7 +112,7 @@ static ssize_t set_prop(rocksdb_t *dbptr,char *key,lispval value,
 		&errmsg);
     kno_close_outbuf(&out);
     if (errmsg)
-      return kno_reterr("Rocksdberror","set_prop",errmsg,KNO_VOID);
+      return kno_reterr(RocksDB_Error,"set_prop",errmsg,KNO_VOID);
     else return xtype_len;}
   else return -1;
 }
@@ -222,7 +224,7 @@ static rocksdb_readoptions_t *get_read_options(kno_rocksdb db,lispval opts_arg)
 static rocksdb_writeoptions_t *get_write_options(kno_rocksdb db,lispval opts_arg)
 {
   if ((KNO_VOIDP(opts_arg))||(KNO_FALSEP(opts_arg))||(KNO_DEFAULTP(opts_arg)))
-    return NULL;
+    return db->writeopts;
   else {
     int modified = 0, free_opts = 0;
     lispval opts = (KNO_VOIDP(opts_arg)) ? (db->opts) :
@@ -240,54 +242,192 @@ static rocksdb_writeoptions_t *get_write_options(kno_rocksdb db,lispval opts_arg
 
 /* Initializing xrefs */
 
-DEF_KNOSYM(xrefs);
+DEF_KNOSYM(xrefs); DEF_KNOSYM(maxrefs); DEF_KNOSYM(debug);
 
-static int init_rocksdb(struct KNO_ROCKSDB *db)
+static int init_rocksdb_xrefs(struct KNO_ROCKSDB *db,lispval opts)
 {
-  lispval opts = db->opts;
-  struct rocksdb_t *rdb = db->dbptr;
-  lispval xrefs = get_prop(db->dbptr,"\377XREFS",KNO_VOID);
-  int rv = -1;
-  if (KNO_VOIDP(xrefs)) {
-    lispval init_spec = kno_getopt(opts,KNOSYM(xrefs),KNO_VOID);
-    if (KNO_VOIDP(init_spec))
-      rv = kno_init_xrefs(&(db->xrefs),0,0,-1,0,NULL,NULL);
-    else if (KNO_FIXNUMP(init_spec))
-      rv = kno_init_xrefs(&(db->xrefs),
-			  0,0,
-			  KNO_FIX2INT(init_spec),
-			  0,
-			  NULL,NULL);
-    else if (KNO_VECTORP(init_spec)) {
-      int len = KNO_VECTOR_LENGTH(init_spec);
-      lispval *elts = KNO_VECTOR_ELTS(init_spec);
-      lispval *copy = kno_copy_vec(elts,len,NULL,0);
-      rv = kno_init_xrefs(&(db->xrefs),len,len,-1,0,copy,NULL);
-      if (rv<0) {
-	kno_decref_vec(copy,len);
-	u8_free(copy);}}
-    else {
-      u8_log(LOGERR,"BadXRefs","Couldn't use init value %q for RocksDB %s",
-	     init_spec,db->path);
-      rv = kno_init_xrefs(&(db->xrefs),0,0,0,0,NULL,NULL);}
-    kno_decref(init_spec);}
-  else if (KNO_VECTORP(xrefs)) {
-    int len = KNO_VECTOR_LENGTH(xrefs);
-    lispval *elts = KNO_VECTOR_ELTS(xrefs);
-    lispval *copy = kno_copy_vec(elts,len,NULL,0);
-    rv = kno_init_xrefs(&(db->xrefs),len,len,-1,0,copy,NULL);
-    if (rv<0) {
-      kno_decref_vec(copy,len);
-      u8_free(copy);}}
+  /* This initializes the xrefs value in the database and on the structure */
+  rocksdb_writeoptions_t *writeopts = get_write_options(db,opts);
+  lispval xrefs_init = kno_getopt(opts,KNOSYM(xrefs),KNO_VOID);
+  int init_maxrefs = kno_getfixopt(opts,"maxrefs",-1);
+  struct XTYPE_REFS *xrefs = &(db->xrefs);
+  lispval *refs = NULL;
+  ssize_t n_xrefs = 0, max_xrefs = init_maxrefs, xrefs_len = 0;
+  if (KNO_VOIDP(xrefs_init)) {
+    if (max_xrefs < 0)
+      xrefs_len = 256;
+    else if (max_xrefs == 0)
+      xrefs_len = 0;
+    else if (max_xrefs >= 1024)
+      xrefs_len = 1024;
+    else xrefs_len = max_xrefs;}
+  else if (KNO_FALSEP(xrefs_init)) {
+    xrefs_len = 0; max_xrefs = 0;}
+  else if (KNO_UINTP(xrefs_init)) {
+    ssize_t maxlen = KNO_FIX2INT(xrefs_init);
+    xrefs_len = maxlen;
+    if (maxlen > max_xrefs) max_xrefs = maxlen;}
+  else if (KNO_VECTORP(xrefs_init)) {
+    refs = KNO_VECTOR_ELTS(xrefs_init);
+    n_xrefs = KNO_VECTOR_LENGTH(xrefs_init);
+    xrefs_len = 256; while (xrefs_len<n_xrefs) xrefs_len *= 2;}
   else {
-    kno_seterr("BadRocksDBXrefs","setup_rocksdb",db->path,xrefs);
-    rv = -1;}
-  kno_decref(xrefs);
+    xrefs_len = 256; n_xrefs = 0; max_xrefs = -1;}
+  if (xrefs_len>0)
+    refs = u8_alloc_n(xrefs_len,lispval);
+  else refs = NULL;
+  if (refs == NULL)
+    return kno_init_xrefs(xrefs,n_xrefs,xrefs_len,max_xrefs,0,refs,NULL);
+  char *errmsg = NULL;
+  KNO_DECL_OUTBUF(keyout,100);
+  KNO_DECL_OUTBUF(valout,100);
+  kno_write_bytes(&keyout,"\377XREFS",6);
+  kno_write_varint(&valout,n_xrefs);
+  if ( max_xrefs >= 0) kno_write_varint(&valout,max_xrefs);
+  rocksdb_put(db->dbptr,writeopts,
+	      keyout.buffer,BUFIO_POINT(&keyout),
+	      valout.buffer,BUFIO_POINT(&valout),
+	      &errmsg);
+  if (errmsg) {
+    u8_byte buf[100];
+    return kno_reterr(RocksDB_Error,"init_rocksdb_xrefs",
+		      u8_bprintf(buf,"%s: %s",db->path,errmsg),KNO_VOID);}
+  int i = 0; while (i<n_xrefs) {
+    keyout.bufwrite=keyout.buffer;
+    kno_write_bytes(&keyout,"\377XREFS",6);
+    kno_write_4bytes(&keyout,i);
+    valout.bufwrite=valout.buffer;
+    kno_write_xtype(&valout,refs[i],NULL);
+    rocksdb_put(db->dbptr,writeopts,
+		keyout.buffer,BUFIO_POINT(&keyout),
+		valout.buffer,BUFIO_POINT(&valout),
+		&errmsg);
+    if (errmsg) {
+      u8_byte buf[100];
+      return kno_reterr(RocksDB_Error,"init_rocksdb_xrefs",
+			u8_bprintf(buf,"%s: %s",db->path,errmsg),KNO_VOID);}
+    i++;}
+  int rv = kno_init_xrefs(xrefs,n_xrefs,xrefs_len,max_xrefs,-1,refs,NULL);
+  if (rv<0) return rv;
+  db->saved_xrefs = n_xrefs;
+  return rv;
+}
+
+static int setup_rocksdb_xrefs(struct KNO_ROCKSDB *db,lispval opts)
+{
+  rocksdb_readoptions_t *readopts = get_read_options(db,opts);
+  struct XTYPE_REFS *xrefs = &(db->xrefs);
+  struct BYTEVEC _prefix = {0}, *prefix;
+  int rv = 0, i = -1, found = 0;
+  rocksdb_iterator_t *iterator = rocksdb_create_iterator(db->dbptr,readopts);
+  ssize_t n_xrefs = 0, max_xrefs = 0, xrefs_len = 0;
+  lispval *refs = NULL;
+  rocksdb_iter_seek(iterator,"\377XREFS",6);
+  while (rocksdb_iter_valid(iterator)) {
+    struct BYTEVEC keybuf, valbuf;
+    keybuf.bytes = rocksdb_iter_key(iterator,&(keybuf.n_bytes));
+    if ( (keybuf.n_bytes<6) || (memcmp(keybuf.bytes,"\377XREFS",6)) ) break;
+    else if ( (i == -1) && (keybuf.n_bytes == 6) ) {
+      valbuf.bytes = rocksdb_iter_value(iterator,&(valbuf.n_bytes));
+      struct KNO_INBUF valstream;
+      KNO_INIT_INBUF(&valstream,valbuf.bytes,valbuf.n_bytes,0);
+      n_xrefs   = kno_read_varint(&valstream);
+      max_xrefs = kno_read_varint(&valstream);
+      if ( (max_xrefs == 0) && (n_xrefs == 0) ) break;
+      else if ( max_xrefs == n_xrefs ) {
+	xrefs_len = n_xrefs;
+	refs = u8_alloc_n(xrefs_len,lispval);}
+      else {
+	ssize_t len = 256;
+	while (len<n_xrefs) len = len*2;
+	if ( (max_xrefs>0) && (len > n_xrefs) && (len > max_xrefs) )
+	  xrefs_len = max_xrefs;
+	else xrefs_len = len;
+	refs = u8_alloc_n(xrefs_len,lispval);}
+      found = 1;
+      i++;}
+    else {
+      struct KNO_INBUF keystream;
+      KNO_INIT_INBUF(&keystream,keybuf.bytes+6,keybuf.n_bytes-6,0);
+      ssize_t xref_i = kno_read_4bytes(&keystream);
+      if (xref_i != i) goto corrupted_xrefs;
+      valbuf.bytes = rocksdb_iter_value(iterator,&(valbuf.n_bytes));
+      struct KNO_INBUF valstream;
+      KNO_INIT_INBUF(&valstream,valbuf.bytes,valbuf.n_bytes,0);
+      lispval ref = kno_read_xtype(&valstream,NULL);
+      if (KNO_ABORTED(ref)) {
+	kno_clear_errors(1);
+	goto corrupted_xrefs;}
+      if (i>=xrefs_len) {
+	ssize_t new_len = xrefs_len + 1;
+	refs = u8_realloc(refs,sizeof(lispval)*xrefs_len);}
+      refs[i++]=ref;}
+    rocksdb_iter_next(iterator);}
+  if (i > n_xrefs) n_xrefs=i;
+  if (found)
+    rv = kno_init_xrefs(xrefs,n_xrefs,xrefs_len,max_xrefs,-1,refs,NULL);
+  else rv = init_rocksdb_xrefs(db,opts);
+  rocksdb_iter_destroy(iterator);
+  if (rv >= 0) return rv;
+ corrupted_xrefs:
+  if (kno_testopt(opts,KNOSYM(debug),KNO_VOID)) {
+    u8_log(LOGWARN,"CorruptedXRefs","For RocksDB @#%d %s",i,db->path);
+    kno_init_xrefs(xrefs,0,0,0,0,refs,NULL);
+    return 0;}
+  else {
+    kno_init_xrefs(xrefs,0,0,0,0,refs,NULL);
+    kno_seterr("CorruptedXRefs","Rocksdb/open",db->path,KNO_VOID);
+    return -1;}
+}
+
+static int sync_rocksdb_xrefs(struct KNO_ROCKSDB *db)
+{
+  if (db->saved_xrefs == db->xrefs.xt_n_refs) return 0;
+  u8_lock_mutex(&(db->rocksdb_lock));
+  if (db->saved_xrefs == db->xrefs.xt_n_refs) {
+    u8_unlock_mutex(&(db->rocksdb_lock));
+    return 0;}
+  int i = db->saved_xrefs,  target = db->xrefs.xt_n_refs;
+  lispval *refs = db->xrefs.xt_refs;
+  while (i<target) {
+    char *errmsg = NULL;
+    KNO_DECL_OUTBUF(keyout,100);
+    KNO_DECL_OUTBUF(valout,100);
+    kno_write_bytes(&keyout,"\377XREFS",6);
+    kno_write_4bytes(&keyout,i);
+    kno_write_xtype(&valout,refs[i],NULL);
+    rocksdb_put(db->dbptr,db->writeopts,
+		keyout.buffer,BUFIO_POINT(&keyout),
+		valout.buffer,BUFIO_POINT(&valout),
+		&errmsg);
+    i++;}
+  db->saved_xrefs = target;
+  ssize_t max_xrefs = db->xrefs.xt_refs_max;
+  KNO_DECL_OUTBUF(valout,100);
+  kno_write_varint(&valout,target);
+  if (target>max_xrefs) max_xrefs=target;
+  if (target>=0) kno_write_varint(&valout,target);
+  char *errmsg = NULL;
+  rocksdb_put(db->dbptr,db->writeopts,
+	      "\377XREFS",6,
+	      valout.buffer,BUFIO_POINT(&valout),
+	      &errmsg);
+  u8_unlock_mutex(&(db->rocksdb_lock));
+  return target;
+}
+
+static int sync_rocksdb_xrefs(struct KNO_ROCKSDB *db);
+#define SYNC_XREFS(db) \
+  if (db->saved_xrefs != db->xrefs.n_xrefs) sync_rocksdb_xrefs(db); else {};
+
+static ssize_t db_write_xtype(struct KNO_ROCKSDB *db,kno_outbuf out,lispval x)
+{
+  ssize_t rv = kno_write_xtype(out,x,&(db->xrefs));
+  if ( (db->xrefs.xt_refs_flags) & (XTYPE_REFS_CHANGED) ) sync_rocksdb_xrefs(db);
   return rv;
 }
 
 /* Initializing KNO_ROCKSDB structs */
-
 
 struct KNO_ROCKSDB *kno_setup_rocksdb
 (struct KNO_ROCKSDB *db,u8_string path,lispval opts)
@@ -316,10 +456,10 @@ struct KNO_ROCKSDB *kno_setup_rocksdb
   db->cacheptr = cache;
   db->envptr = env;
   if ((db->dbptr = rocksdb_open(options,path,&errmsg)) &&
-      (init_rocksdb(db) >= 0) ) {
+      (setup_rocksdb_xrefs(db,opts) >= 0) ) {
     db->dbstatus = rocksdb_opened;
     u8_unlock_mutex(&(db->rocksdb_lock));
-    return db;}
+     return db;}
   else {
     kno_seterr("OpenFailed","kno_open_rocksdb",errmsg,opts);
     db->dbstatus = rocksdb_error;
@@ -473,12 +613,12 @@ static lispval rocksdb_get_prim(lispval rocksdb,lispval key,lispval opts)
       u8_free(binary_data);
       return result;}
     else if (errmsg)
-      return kno_err("RocksdbError","rocksdb_get_prim",errmsg,KNO_VOID);
+      return kno_err(RocksDB_Error,"rocksdb_get_prim",errmsg,KNO_VOID);
     else return KNO_EMPTY_CHOICE;}
   else {
     struct KNO_OUTBUF keyout = { 0 };
     KNO_INIT_BYTE_OUTPUT(&keyout,1024);
-    if (kno_write_xtype(&keyout,key,&(db->rocksdb.xrefs))>0) {
+    if (db_write_xtype(knoldb,&keyout,key)>0) {
       lispval result = KNO_VOID;
       ssize_t binary_size;
       unsigned char *binary_data=
@@ -491,7 +631,7 @@ static lispval rocksdb_get_prim(lispval rocksdb,lispval key,lispval opts)
 	rocksdb_readoptions_destroy(readopts);
       if (binary_data == NULL) {
 	if (errmsg)
-	  result = kno_err("RocksdbError","rocksdb_get_prim",errmsg,KNO_VOID);
+	  result = kno_err(RocksDB_Error,"rocksdb_get_prim",errmsg,KNO_VOID);
 	else result = KNO_EMPTY_CHOICE;}
       else {
 	struct KNO_INBUF valuein = { 0 };
@@ -522,18 +662,18 @@ static lispval rocksdb_put_prim(lispval rocksdb,lispval key,lispval value,
 		&errmsg);
     if (useopts) rocksdb_writeoptions_destroy(useopts);
     if (errmsg)
-      return kno_err("RocksdbError","rocksdb_put_prim",errmsg,KNO_VOID);
+      return kno_err(RocksDB_Error,"rocksdb_put_prim",errmsg,KNO_VOID);
     else return KNO_VOID;}
   else {
     struct KNO_OUTBUF keyout = { 0 };
     KNO_INIT_BYTE_OUTPUT(&keyout,1024);
     struct KNO_OUTBUF valout = { 0 };
     KNO_INIT_BYTE_OUTPUT(&valout,1024);
-    if (kno_write_xtype(&keyout,key,&(db->rocksdb.xrefs))<0) {
+    if (db_write_xtype(knoldb,&keyout,key)<0) {
       kno_close_outbuf(&keyout);
       kno_close_outbuf(&valout);
       return KNO_ERROR_VALUE;}
-    else if (kno_write_xtype(&valout,value,&(db->rocksdb.xrefs))<0) {
+    else if (db_write_xtype(knoldb,&valout,value)<0) {
       kno_close_outbuf(&keyout);
       kno_close_outbuf(&valout);
       return KNO_ERROR_VALUE;}
@@ -548,7 +688,7 @@ static lispval rocksdb_put_prim(lispval rocksdb,lispval key,lispval value,
       kno_close_outbuf(&valout);
       if (useopts) rocksdb_writeoptions_destroy(useopts);
       if (errmsg)
-	return kno_err("RocksdbError","rocksdb_put_prim",errmsg,KNO_VOID);
+	return kno_err(RocksDB_Error,"rocksdb_put_prim",errmsg,KNO_VOID);
       else return KNO_VOID;}}
 }
 
@@ -567,12 +707,12 @@ static lispval rocksdb_drop_prim(lispval rocksdb,lispval key,lispval opts)
 		   &errmsg);
     if (useopts) rocksdb_writeoptions_destroy(useopts);
     if (errmsg)
-      return kno_err("RocksdbError","rocksdb_put_prim",errmsg,KNO_VOID);
+      return kno_err(RocksDB_Error,"rocksdb_put_prim",errmsg,KNO_VOID);
     else return KNO_VOID;}
   else {
     struct KNO_OUTBUF keyout = { 0 };
     KNO_INIT_BYTE_OUTPUT(&keyout,1024);
-    if (kno_write_xtype(&keyout,key,&(db->rocksdb.xrefs))<0) {
+    if (db_write_xtype(knoldb,&keyout,key)<0) {
       kno_close_outbuf(&keyout);
       if (useopts) rocksdb_writeoptions_destroy(useopts);
       return KNO_ERROR_VALUE;}
@@ -583,7 +723,7 @@ static lispval rocksdb_drop_prim(lispval rocksdb,lispval key,lispval opts)
       kno_close_outbuf(&keyout);
       if (useopts) rocksdb_writeoptions_destroy(useopts);
       if (errmsg)
-	return kno_err("RocksdbError","rocksdb_put_prim",errmsg,KNO_VOID);
+	return kno_err(RocksDB_Error,"rocksdb_put_prim",errmsg,KNO_VOID);
       else return KNO_VOID;}}
 }
 
@@ -643,12 +783,24 @@ static lispval rocksdb_getn_prim(lispval rocksdb,lispval keys,lispval opts)
       keyvec[i].encoded.n_bytes = KNO_PACKET_LENGTH(key);
       keyvec[i].dtype = 0;}
     else {
-      size_t pos = (out.bufwrite-out.buffer);
-      ssize_t len = kno_write_xtype(&out,key,&(db->xrefs));
+      size_t off = (out.bufwrite-out.buffer);
+      ssize_t len = db_write_xtype(db,&out,key);
+      if (len<0) {
+	kno_decref(results);
+	u8_free(keyvec);
+	kno_close_outbuf(&out);
+	return KNO_ERROR;}
       keyvec[i].key = key;
       keyvec[i].encoded.n_bytes = len;
-      keyvec[i].encoded.bytes = (unsigned char *) pos;
+      keyvec[i].encoded.bytes = (unsigned char *) off;
       keyvec[i].dtype = 1;}
+    i++;}
+  /* Convert offsets to byte pointers */
+  unsigned char *keybuf = out.buffer;
+  i = 0; while (i<n) {
+    if (keyvec[i].dtype) {
+      size_t off = (size_t) keyvec[i].encoded.bytes;
+      keyvec[i].encoded.bytes = keybuf+off;}
     i++;}
   struct ROCKSDB_KEYBUF *values = fetchn(db,n,keyvec,readopts);
   i=0; while (i<n) {
@@ -672,16 +824,17 @@ static lispval rocksdb_getn_prim(lispval rocksdb,lispval keys,lispval opts)
 }
 
 static struct BYTEVEC *write_prefix
-(struct BYTEVEC *prefix,lispval key,xtype_refs xrefs)
+(struct BYTEVEC *prefix,lispval key,struct KNO_ROCKSDB *db)
 {
   struct KNO_OUTBUF keyout = { 0 };
   KNO_INIT_BYTE_OUTPUT(&keyout,1000);
-  ssize_t n_bytes = kno_write_xtype(&keyout,key,xrefs);
+  ssize_t n_bytes = db_write_xtype(db,&keyout,key);
   if (n_bytes < 0) {
     kno_close_outbuf(&keyout);
     return NULL;}
   else if ( n_bytes != (keyout.bufwrite-keyout.buffer) ) {
-    u8_seterr("Inconsistent XTYPE size for key","rocksdb_scanner",NULL);
+    u8_seterr("Inconsistent XTYPE size for key",
+	      "rocksdb_scanner/write_prefix",NULL);
     return NULL;}
   else {
     prefix->bytes   = keyout.buffer;
@@ -706,7 +859,7 @@ static int rocksdb_scanner(struct KNO_ROCKSDB *db,lispval opts,
     _prefix.n_bytes = KNO_PACKET_LENGTH(key);
     prefix = &_prefix;}
   else {
-    prefix = write_prefix(&_prefix,key,xrefs);
+    prefix = write_prefix(&_prefix,key,db);
     free_prefix=1;}
   if (prefix == NULL) return -1;
   rocksdb_iterator_t *iterator = (use_iterator) ? (use_iterator) :
@@ -719,11 +872,8 @@ static int rocksdb_scanner(struct KNO_ROCKSDB *db,lispval opts,
 	 (memcmp(keybuf.bytes,prefix->bytes,prefix->n_bytes) == 0) ) {
       valbuf.bytes = rocksdb_iter_value(iterator,&(valbuf.n_bytes));
       rv = iterfn(key,prefix,&keybuf,&valbuf,xrefs,state);
-      /* u8_free(keybuf.bytes); u8_free(valbuf.bytes); */
       if (rv <= 0) break;}
-    else {
-      /* u8_free(keybuf.bytes); */
-      break;}
+    else break;
     rocksdb_iter_next(iterator);}
   if (free_prefix) u8_free(prefix->bytes);
   if (use_iterator == NULL) rocksdb_iter_destroy(iterator);
@@ -747,7 +897,7 @@ static int rocksdb_key_scanner(struct KNO_ROCKSDB *db,lispval opts,
     _prefix.n_bytes = KNO_PACKET_LENGTH(key);
     prefix = &_prefix;}
   else {
-    prefix = write_prefix(&_prefix,key,xrefs);
+    prefix = write_prefix(&_prefix,key,db);
     free_prefix=1;}
   if (prefix == NULL) return -1;
   rocksdb_iterator_t *iterator = (use_iterator) ? (use_iterator) :
@@ -786,7 +936,7 @@ static int rocksdb_editor(struct KNO_ROCKSDB *db,lispval opts,
     _prefix.n_bytes = KNO_PACKET_LENGTH(key);
     prefix = &_prefix;}
   else {
-    prefix = write_prefix(&_prefix,key,&(db->xrefs));
+    prefix = write_prefix(&_prefix,key,db);
     free_prefix=1;}
   if (prefix == NULL) return -1;
   rocksdb_iterator_t *iterator = (use_iterator) ? (use_iterator) :
@@ -863,7 +1013,14 @@ static lispval rocksdb_prefix_getn_prim(lispval rocksdb,lispval keys,lispval opt
     lispval key = KNO_VECTOR_REF(keys,i);
     struct KNO_OUTBUF keyout = { 0 };
     KNO_INIT_BYTE_OUTPUT(&keyout,512);
-    kno_write_xtype(&keyout,key,&(db->xrefs));
+    ssize_t rv = db_write_xtype(db,&keyout,key);
+    if (rv<0) {
+      kno_decref(result);
+      int j = 0; while (j<0) {
+	u8_free(prefixes[j].encoded.bytes);
+	j++;}
+      u8_free(prefixes);
+      return KNO_ERROR;}
     prefixes[i].key = key;
     prefixes[i].keypos = i;
     prefixes[i].encoded.n_bytes = keyout.bufwrite-keyout.buffer;
@@ -978,7 +1135,7 @@ static ssize_t rocksdb_add_helper(struct KNO_ROCKSDB *db,
   long long n_vals=0, n_blocks=0, header_type=0;
   ssize_t rv = 0;
   KNO_INIT_BYTE_OUTPUT(&keyout,1000);
-  rv=kno_write_xtype(&keyout,key,&(db->xrefs));
+  rv=db_write_xtype(db,&keyout,key);
   if (rv<0) return rv;
   KNO_INIT_BYTE_OUTPUT(&valout,1000);
   keybuf.n_bytes = keyout.bufwrite-keyout.buffer;
@@ -987,12 +1144,12 @@ static ssize_t rocksdb_add_helper(struct KNO_ROCKSDB *db,
     (db->dbptr,readopts,keybuf.bytes,keybuf.n_bytes,&valbuf.n_bytes,&errmsg);
   if (readopts != db->readopts) rocksdb_readoptions_destroy(readopts);
   if (errmsg) {
-    kno_seterr("RocksdbError","rocksdb_add_helper",errmsg,KNO_VOID);
+    kno_seterr(RocksDB_Error,"rocksdb_add_helper",errmsg,KNO_VOID);
     kno_close_outbuf(&keyout);
     kno_close_outbuf(&valout);
     return -1;}
   if (valbuf.bytes == NULL) {
-    rv = kno_write_xtype(&valout,values,&(db->xrefs));
+    rv = db_write_xtype(db,&valout,values);
     if (rv >= 0)
       rocksdb_writebatch_put
 	(batch,keybuf.bytes,keybuf.n_bytes,
@@ -1015,7 +1172,7 @@ static ssize_t rocksdb_add_helper(struct KNO_ROCKSDB *db,
 	n_vals += KNO_CHOICE_SIZE(values);
       else n_vals++;
       n_blocks++;
-      rv = kno_write_xtype(&valout,values,&(db->xrefs));}
+      rv = db_write_xtype(db,&valout,values);}
     if (rv<0) n_vals=-1;}
   else {
     lispval combined = rocksdb_decode_value(&curbuf,oidcodes);
@@ -1063,7 +1220,7 @@ static ssize_t rocksdb_adder(struct KNO_ROCKSDB *db,lispval key,
   char *errmsg = NULL;
   rocksdb_write(db->dbptr,sync_writeopts,batch,&errmsg);
   if (errmsg)
-    kno_seterr("RocksdbError","rocksdb_add_helper",errmsg,KNO_VOID);
+    kno_seterr(RocksDB_Error,"rocksdb_add_helper",errmsg,KNO_VOID);
   rocksdb_writebatch_destroy(batch);
   if (errmsg)
     return -1;
@@ -1086,550 +1243,6 @@ static lispval rocksdb_index_add_prim(lispval rocksdb,lispval key,
     return KNO_ERROR_VALUE;
   else return KNO_INT(rv);
 }
-
-/* Rocksdb pool backends */
-
-static struct KNO_POOL_HANDLER rocksdb_pool_handler;
-
-KNO_EXPORT
-kno_pool kno_open_rocksdb_pool(u8_string path,kno_storage_flags flags,lispval opts)
-{
-  struct KNO_ROCKSDB_POOL *pool = u8_alloc(struct KNO_ROCKSDB_POOL);
-  if (kno_setup_rocksdb(&(pool->rocksdb),path,opts)) {
-    rocksdb_t *dbptr = pool->rocksdb.dbptr;
-    lispval base = get_prop(dbptr,"\377BASE",KNO_VOID);
-    lispval cap = get_prop(dbptr,"\377CAPACITY",KNO_VOID);
-    lispval load = get_prop(dbptr,"\377LOAD",KNO_VOID);
-    lispval metadata = get_prop(dbptr,"\377METADATA",KNO_VOID);
-    lispval slotcodes = get_prop(dbptr,"\377SLOTIDS",KNO_VOID);
-    if ((KNO_OIDP(base)) && (KNO_UINTP(cap)) && (KNO_UINTP(load))) {
-      u8_string realpath = u8_realpath(path,NULL);
-      u8_string abspath = u8_abspath(path,NULL);
-      lispval adjunct_opt = kno_getopt(opts,SYM("ADJUNCT"),KNO_VOID);
-      lispval read_only_opt = kno_getopt(opts,SYM("READONLY"),KNO_VOID);
-      lispval label = get_prop(dbptr,"\377LABEL",KNO_VOID);
-      kno_init_pool((kno_pool)pool,
-		    KNO_OID_ADDR(base),KNO_FIX2INT(cap),
-		    &rocksdb_pool_handler,
-		    path,abspath,realpath,
-		    KNO_STORAGE_ISPOOL,metadata,opts);
-      u8_free(realpath);
-      u8_free(abspath);
-      if (KNO_VOIDP(read_only_opt))
-	read_only_opt = get_prop(dbptr,"\377READONLY",KNO_VOID);
-      if (KNO_VOIDP(read_only_opt))
-	adjunct_opt = get_prop(dbptr,"\377ADJUNCT",KNO_VOID);
-      if ( (! KNO_VOIDP(read_only_opt)) && (KNO_TRUEP(read_only_opt)) )
-	pool->pool_flags |= KNO_STORAGE_READ_ONLY;
-      if ( (! KNO_VOIDP(adjunct_opt)) && (!(KNO_FALSEP(adjunct_opt))) )
-	pool->pool_flags |= KNO_POOL_ADJUNCT;
-      pool->pool_load = KNO_FIX2INT(load);
-      if (KNO_STRINGP(label)) {
-	pool->pool_label = u8_strdup(KNO_CSTRING(label));}
-      if (KNO_SLOTMAPP(metadata)) {
-	kno_copy_slotmap((kno_slotmap)metadata,
-			 &(pool->pool_metadata));
-	kno_set_modified(((lispval)(&(pool->pool_metadata))),0);}
-      if (KNO_VECTORP(slotcodes))
-	kno_init_slotcoder(&(pool->slotcodes),
-			   KNO_VECTOR_LENGTH(slotcodes),
-			   KNO_VECTOR_ELTS(slotcodes));
-      else kno_init_slotcoder(&(pool->slotcodes),0,NULL);
-      kno_decref(adjunct_opt); kno_decref(read_only_opt);
-      kno_decref(metadata); kno_decref(label);
-      kno_decref(base); kno_decref(cap); kno_decref(load);
-      kno_decref(slotcodes);
-      kno_register_pool((kno_pool)pool);
-      return (kno_pool)pool;}
-    else  {
-      kno_decref(base); kno_decref(cap); kno_decref(load);
-      kno_decref(slotcodes); kno_decref(metadata);
-      kno_close_rocksdb(&(pool->rocksdb));
-      u8_free(pool);
-      kno_seterr("NotAPoolDB","kno_rocksdb_pool",NULL,KNO_VOID);
-      return (kno_pool)NULL;}}
-  else return NULL;
-}
-
-KNO_EXPORT
-kno_pool kno_make_rocksdb_pool(u8_string path,
-			       lispval base,
-			       lispval cap,
-			       lispval opts)
-{
-  lispval load = kno_getopt(opts,SYM("LOAD"),KNO_FIXZERO);
-
-  if ((!(KNO_OIDP(base)))||(!(KNO_UINTP(cap)))||(!(KNO_UINTP(load)))) {
-    kno_seterr("Not enough information to create a pool",
-	       "kno_make_rocksdb_pool",path,opts);
-    return (kno_pool)NULL;}
-
-  struct KNO_ROCKSDB_POOL *pool = u8_alloc(struct KNO_ROCKSDB_POOL);
-
-  if (kno_setup_rocksdb(&(pool->rocksdb),path,opts)) {
-    rocksdb_t *dbptr = pool->rocksdb.dbptr;
-    lispval label = kno_getopt(opts,SYM("LABEL"),KNO_VOID);
-    lispval metadata = kno_getopt(opts,SYM("METADATA"),KNO_VOID);
-    lispval given_base = get_prop(dbptr,"\377BASE",KNO_VOID);
-    lispval given_cap = get_prop(dbptr,"\377CAPACITY",KNO_VOID);
-    lispval given_load = get_prop(dbptr,"\377LOAD",KNO_VOID);
-    lispval cur_label = get_prop(dbptr,"\377LABEL",KNO_VOID);
-    lispval cur_metadata = get_prop(dbptr,"\377METADATA",KNO_VOID);
-    lispval ctime_val = kno_getopt(opts,kno_intern("ctime"),KNO_VOID);
-    lispval mtime_val = kno_getopt(opts,kno_intern("mtime"),KNO_VOID);
-    lispval generation_val = kno_getopt(opts,kno_intern("generation"),KNO_VOID);
-    lispval slotids = kno_getopt(opts,kno_intern("slotids"),KNO_VOID);
-
-    u8_string realpath = u8_realpath(path,NULL);
-    u8_string abspath = u8_abspath(path,NULL);
-    time_t now=time(NULL), ctime, mtime;
-
-    if (!((KNO_VOIDP(given_base))||(KNO_EQUALP(base,given_base)))) {
-      u8_free(pool); u8_free(realpath); u8_free(abspath);
-      kno_seterr("Conflicting base OIDs",
-		 "kno_make_rocksdb_pool",path,opts);
-      return NULL;}
-    if (!((KNO_VOIDP(given_cap))||(KNO_EQUALP(cap,given_cap)))) {
-      u8_free(pool); u8_free(realpath); u8_free(abspath);
-      kno_seterr("Conflicting pool capacities",
-		 "kno_make_rocksdb_pool",path,opts);
-      return NULL;}
-    if (!(KNO_VOIDP(label))) {
-      if (!(KNO_EQUALP(label,cur_label)))
-	set_prop(dbptr,"\377LABEL",label,sync_writeopts);}
-
-    set_prop(dbptr,"\377BASE",base,sync_writeopts);
-    set_prop(dbptr,"\377CAPACITY",cap,sync_writeopts);
-
-    if (KNO_VOIDP(given_load))
-      set_prop(dbptr,"\377LOAD",load,sync_writeopts);
-
-    if (KNO_SLOTMAPP(metadata)) {
-      if ( (KNO_VOIDP(cur_metadata)) || (kno_testopt(opts,SYM("FORCE"),KNO_VOID)) ) {
-	set_prop(dbptr,"\377METADATA",metadata,sync_writeopts);}
-      else u8_log(LOG_WARN,"ExistingMetadata",
-		  "Not overwriting existing metatdata in rocksdb pool %s:",
-		  path,cur_metadata);}
-
-    kno_init_pool((kno_pool)pool,
-		  KNO_OID_ADDR(base),KNO_FIX2INT(cap),
-		  &rocksdb_pool_handler,
-		  path,abspath,realpath,
-		  KNO_STORAGE_ISPOOL,
-		  metadata,
-		  opts);
-
-    if (KNO_VECTORP(slotids)) {
-      set_prop(dbptr,"\377SLOTIDS",slotids,sync_writeopts);
-      kno_init_slotcoder(&(pool->slotcodes),
-			 KNO_VECTOR_LENGTH(slotids),
-			 KNO_VECTOR_ELTS(slotids));}
-    else if (KNO_UINTP(slotids)) {
-      lispval tmp = kno_fill_vector(KNO_FIX2INT(slotids),KNO_FALSE);
-      set_prop(dbptr,"\377SLOTIDS",tmp,sync_writeopts);
-      kno_init_slotcoder(&(pool->slotcodes),
-			 KNO_VECTOR_LENGTH(tmp),
-			 KNO_VECTOR_ELTS(tmp));
-      kno_decref(tmp);}
-    else {
-      kno_init_slotcoder(&(pool->slotcodes),0,NULL);
-      if (! ( (KNO_VOIDP(slotids)) || (KNO_FALSEP(slotids)) ) )
-	u8_log(LOG_WARN,"BadSlotIDs","%q",slotids);}
-
-    if (KNO_FIXNUMP(ctime_val))
-      ctime = (time_t) KNO_FIX2INT(ctime_val);
-    else if (KNO_PRIM_TYPEP(ctime_val,kno_timestamp_type)) {
-      struct KNO_TIMESTAMP *moment = (kno_timestamp) ctime_val;
-      ctime = moment->u8xtimeval.u8_tick;}
-    else ctime=now;
-    kno_decref(ctime_val);
-    ctime_val = kno_time2timestamp(ctime);
-    set_prop(dbptr,"\377CTIME",ctime_val,sync_writeopts);
-
-    if (KNO_FIXNUMP(mtime_val))
-      mtime = (time_t) KNO_FIX2INT(mtime_val);
-    else if (KNO_PRIM_TYPEP(mtime_val,kno_timestamp_type)) {
-      struct KNO_TIMESTAMP *moment = (kno_timestamp) mtime_val;
-      mtime = moment->u8xtimeval.u8_tick;}
-    else mtime=now;
-    kno_decref(mtime_val);
-    mtime_val = kno_time2timestamp(mtime);
-    set_prop(dbptr,"\377MTIME",mtime_val,sync_writeopts);
-
-    if (KNO_FIXNUMP(generation_val))
-      set_prop(dbptr,"\377GENERATION",generation_val,sync_writeopts);
-    else set_prop(dbptr,"\377GENERATION",KNO_INT(0),sync_writeopts);
-
-    pool->pool_flags = kno_get_dbflags(opts,KNO_STORAGE_ISPOOL);
-    pool->pool_flags &= ~KNO_STORAGE_READ_ONLY;
-    pool->pool_load = KNO_FIX2INT(load);
-
-    if (KNO_STRINGP(label)) {
-      pool->pool_label = u8_strdup(KNO_CSTRING(label));}
-
-    kno_decref(slotids);
-    kno_decref(metadata);
-    kno_decref(generation_val);
-    kno_decref(ctime_val);
-    kno_decref(mtime_val);
-    u8_free(realpath);
-    u8_free(abspath);
-
-    kno_register_pool((kno_pool)pool);
-
-    return (kno_pool)pool;}
-  else  {
-    kno_close_rocksdb(&(pool->rocksdb));
-    u8_free(pool);
-    kno_seterr("NotAPoolDB","kno_rocksdb_pool",NULL,KNO_VOID);
-    return (kno_pool)NULL;}
-}
-
-static lispval read_oid_value(kno_rocksdb_pool p,struct KNO_INBUF *in)
-{
-  return kno_decode_slotmap(in,&(p->slotcodes));
-}
-
-static ssize_t write_oid_value(kno_rocksdb_pool p,
-			       struct KNO_OUTBUF *out,
-			       lispval value)
-{
-  return kno_write_xtype(out,value,&(p->rocksdb.xrefs));
-}
-
-static lispval get_oid_value(kno_rocksdb_pool ldp,unsigned int offset)
-{
-  ssize_t data_size; char *errmsg = NULL;
-  rocksdb_t *dbptr = ldp->rocksdb.dbptr;
-  rocksdb_readoptions_t *readopts = ldp->rocksdb.readopts;
-  unsigned char keybuf[5];
-  keybuf[0]=0xFE;
-  keybuf[1]=((offset>>24)&0XFF);
-  keybuf[2]=((offset>>16)&0XFF);
-  keybuf[3]=((offset>>8)&0XFF);
-  keybuf[4]=(offset&0XFF);
-  unsigned char *buf = rocksdb_get
-    (dbptr,readopts,keybuf,5,&data_size,&errmsg);
-  if (buf) {
-    lispval result = KNO_VOID;
-    struct KNO_INBUF in = { 0 };
-    KNO_INIT_BYTE_INPUT(&in,buf,data_size);
-    result = read_oid_value(ldp,&in);
-    u8_free(buf);
-    return result;}
-  else if (errmsg)
-    return kno_err("Rocksdberror","get_prop",NULL,KNO_VOID);
-  else return KNO_VOID;
-}
-
-static int queue_oid_value(kno_rocksdb_pool ldp,
-			   unsigned int offset,
-			   lispval value,
-			   rocksdb_writebatch_t *batch)
-{
-  struct KNO_OUTBUF out = { 0 };
-  ssize_t dtype_len;
-  unsigned char buf[5];
-  buf[0]=0xFE;
-  buf[1]=((offset>>24)&0XFF);
-  buf[2]=((offset>>16)&0XFF);
-  buf[3]=((offset>>8)&0XFF);
-  buf[4]=(offset&0XFF);
-  KNO_INIT_BYTE_OUTPUT(&out,512);
-  if ((dtype_len = write_oid_value(ldp,&out,value))>0) {
-    rocksdb_writebatch_put
-      (batch,buf,5,out.buffer,out.bufwrite-out.buffer);
-    kno_close_outbuf(&out);
-    return dtype_len;}
-  else return -1;
-}
-
-static lispval rocksdb_pool_alloc(kno_pool p,int n)
-{
-  lispval results = KNO_EMPTY_CHOICE; unsigned int i = 0, start;
-  struct KNO_ROCKSDB_POOL *pool = (struct KNO_ROCKSDB_POOL *)p;
-  kno_lock_pool_struct(p,1);
-  if (pool->pool_load+n>=pool->pool_capacity) {
-    kno_unlock_pool_struct(p);
-    return kno_err(kno_ExhaustedPool,"rocksdb_pool_alloc",pool->poolid,KNO_VOID);}
-  start = pool->pool_load;
-  pool->pool_load = start+n;
-  kno_unlock_pool_struct(p);
-  while (i < n) {
-    KNO_OID new_addr = KNO_OID_PLUS(pool->pool_base,start+i);
-    lispval new_oid = kno_make_oid(new_addr);
-    KNO_ADD_TO_CHOICE(results,new_oid);
-    i++;}
-  return results;
-}
-
-static lispval rocksdb_pool_fetchoid(kno_pool p,lispval oid)
-{
-  struct KNO_ROCKSDB_POOL *pool = (struct KNO_ROCKSDB_POOL *)p;
-  KNO_OID addr = KNO_OID_ADDR(oid);
-  unsigned int offset = KNO_OID_DIFFERENCE(addr,pool->pool_base);
-  return get_oid_value(pool,offset);
-}
-
-struct OFFSET_ENTRY {
-  unsigned int oid_offset;
-  unsigned int fetch_offset;};
-
-static int off_compare(const void *x,const void *y)
-{
-  const struct OFFSET_ENTRY *ex = x, *ey = y;
-  if (ex->oid_offset<ey->oid_offset) return -1;
-  else if (ex->oid_offset>ey->oid_offset) return 1;
-  else return 0;
-}
-
-static lispval *rocksdb_pool_fetchn(kno_pool p,int n,lispval *oids)
-{
-  struct KNO_ROCKSDB_POOL *pool = (struct KNO_ROCKSDB_POOL *)p;
-  struct OFFSET_ENTRY *entries = u8_alloc_n(n,struct OFFSET_ENTRY);
-  rocksdb_readoptions_t *readopts = pool->rocksdb.readopts;
-  unsigned int largest_offset = 0, offsets_sorted = 1;
-  lispval *values = u8_big_alloc_n(n,lispval);
-  KNO_OID base = p->pool_base;
-  int i = 0; while (i<n) {
-    KNO_OID addr = KNO_OID_ADDR(oids[i]);
-    unsigned int offset = KNO_OID_DIFFERENCE(addr,base);
-    entries[i].oid_offset = KNO_OID_DIFFERENCE(addr,base);
-    entries[i].fetch_offset = i;
-    if (offsets_sorted) {
-      if (offset>=largest_offset) largest_offset = offset;
-      else offsets_sorted = 0;}
-    i++;}
-  if (!(offsets_sorted)) {
-    qsort(entries,n,sizeof(struct OFFSET_ENTRY),off_compare);}
-  rocksdb_iterator_t *iterator=
-    rocksdb_create_iterator(pool->rocksdb.dbptr,readopts);
-  i = 0; while (i<n) {
-    unsigned char keybuf[5];
-    unsigned int offset = entries[i].oid_offset;
-    unsigned int fetch_offset = entries[i].fetch_offset;
-    keybuf[0]=0xFE;
-    keybuf[1]=((offset>>24)&0XFF);
-    keybuf[2]=((offset>>16)&0XFF);
-    keybuf[3]=((offset>>8)&0XFF);
-    keybuf[4]=(offset&0XFF);
-    rocksdb_iter_seek(iterator,keybuf,5);
-    ssize_t bytes_len;
-    const unsigned char *bytes = rocksdb_iter_value(iterator,&bytes_len);
-    if (bytes) {
-      struct KNO_INBUF in = { 0 };
-      KNO_INIT_BYTE_INPUT(&in,bytes,bytes_len);
-      lispval oidvalue = read_oid_value(pool,&in);
-      values[fetch_offset]=oidvalue;}
-    else values[fetch_offset]=KNO_VOID;
-    i++;}
-  rocksdb_iter_destroy(iterator);
-  u8_free(entries);
-  return values;
-}
-
-static int rocksdb_pool_getload(kno_pool p)
-{
-  struct KNO_ROCKSDB_POOL *pool = (struct KNO_ROCKSDB_POOL *)p;
-  return pool->pool_load;
-}
-
-static int rocksdb_pool_lock(kno_pool p,lispval oids)
-{
-  /* What should this really do? */
-  return 1;
-}
-
-static int rocksdb_pool_unlock(kno_pool p,lispval oids)
-{
-  /* What should this really do? Flush edits to disk? storen? */
-  return 1;
-}
-
-static void rocksdb_pool_close(kno_pool p)
-{
-  struct KNO_ROCKSDB_POOL *pool = (struct KNO_ROCKSDB_POOL *)p;
-  kno_close_rocksdb(&(pool->rocksdb));
-}
-
-
-static int rocksdb_pool_storen(kno_pool p,int n,lispval *oids,lispval *values)
-{
-  struct KNO_ROCKSDB_POOL *pool = (struct KNO_ROCKSDB_POOL *)p;
-  rocksdb_t *dbptr = pool->rocksdb.dbptr;
-  int i = 0, errval = 0;
-  char *errmsg = NULL;
-  rocksdb_writebatch_t *batch = rocksdb_writebatch_create();
-  ssize_t n_bytes = 0;
-  while (i<n) {
-    lispval oid = oids[i], value = values[i];
-    KNO_OID addr = KNO_OID_ADDR(oid);
-    unsigned int offset = KNO_OID_DIFFERENCE(addr,pool->pool_base);
-    if (offset >= pool->pool_load) {
-      if ( (pool->pool_flags) & KNO_POOL_ADJUNCT )
-	pool->pool_load = offset+1;
-      else {
-	kno_seterr("Saving unallocated OID","rocksdb_pool_storen",
-		   p->poolid,oid);
-	errval=-1; break;}}
-    ssize_t len = queue_oid_value(pool,offset,value,batch);
-    if (len<0) {errval = len; break;}
-    else {n_bytes+=len; i++;}}
-  if (errval>=0) {
-    kno_lock_pool_struct(p,1); {
-      struct KNO_OUTBUF dtout = { 0 };
-      unsigned char intbuf[5];
-      int load = pool->pool_load;
-      intbuf[0]= dt_fixnum;
-      intbuf[1]= (load>>24)&0xFF;
-      intbuf[2]= (load>>16)&0xFF;
-      intbuf[3]= (load>>8)&0xFF;
-      intbuf[4]= load&0xFF;
-      rocksdb_writebatch_put(batch,"\377LOAD",strlen("\377LOAD"),intbuf,5);
-      if (pool->slotcodes.n_slotcodes != pool->slotcodes.init_n_slotcodes) {
-	KNO_INIT_BYTE_OUTPUT( &dtout, ((pool->slotcodes.n_slotcodes) * 16) );
-	ssize_t len = kno_write_dtype(&dtout, (lispval) (pool->slotcodes.slotids) );
-	if (len>0)
-	  rocksdb_writebatch_put(batch,"\377SLOTIDS",strlen("\377SLOTIDS"),
-				 dtout.buffer,len);
-	else {
-	  kno_seterr("Rocksdb/FailedSaveSlotids","rocksdb_pool_storen",
-		     p->poolid,KNO_VOID);
-	  errval=-1;}
-	kno_close_outbuf( &dtout );}}
-    kno_unlock_pool_struct(p);
-    if (errval>=0) {
-      rocksdb_write(dbptr,sync_writeopts,batch,&errmsg);
-      if (errmsg) {
-	u8_seterr("RocksdbError","rocksdb_pool_storen",errmsg);
-	errval = -1;}}
-    rocksdb_writebatch_destroy(batch);}
-  if (errval<0)
-    return errval;
-  else return n;
-}
-
-static int rocksdb_pool_commit(kno_pool p,kno_commit_phase phase,
-			       struct KNO_POOL_COMMITS *commits)
-{
-  switch (phase) {
-  case kno_commit_start:
-    return 0;
-  case kno_commit_write:
-    return rocksdb_pool_storen(p,commits->commit_count,
-			       commits->commit_oids,
-			       commits->commit_vals);
-  case kno_commit_sync:
-    return 0;
-  case kno_commit_rollback:
-    return 0;
-  case kno_commit_cleanup:
-    return 0;
-  default:
-    return 0;
-  }
-}
-
-/* Creating rocksdb pools */
-
-static kno_pool rocksdb_pool_create(u8_string spec,void *type_data,
-				    kno_storage_flags storage_flags,
-				    lispval opts)
-{
-  lispval base_oid = kno_getopt(opts,kno_intern("base"),VOID);
-  lispval capacity_arg = kno_getopt(opts,kno_intern("capacity"),VOID);
-  lispval load_arg = kno_getopt(opts,kno_intern("load"),VOID);
-  lispval metadata = kno_getopt(opts,kno_intern("metadata"),VOID);
-  unsigned int capacity;
-  kno_pool dbpool = NULL;
-  int rv = 0;
-  if (u8_file_existsp(spec)) {
-    kno_seterr(_("FileAlreadyExists"),"rocksdb_pool_create",spec,VOID);
-    return NULL;}
-  else if (!(OIDP(base_oid))) {
-    kno_seterr("Not a base oid","rocksdb_pool_create",spec,base_oid);
-    rv = -1;}
-  else if (KNO_ISINT(capacity_arg)) {
-    int capval = kno_getint(capacity_arg);
-    if (capval<=0) {
-      kno_seterr("Not a valid capacity","rocksdb_pool_create",
-		 spec,capacity_arg);
-      rv = -1;}
-    else capacity = capval;}
-  else {
-    kno_seterr("Not a valid capacity","rocksdb_pool_create",
-	       spec,capacity_arg);
-    rv = -1;}
-  if (rv<0) {}
-  else if (KNO_ISINT(load_arg)) {
-    int loadval = kno_getint(load_arg);
-    if (loadval<0) {
-      kno_seterr("Not a valid load","rocksdb_pool_create",spec,load_arg);
-      rv = -1;}
-    else if (loadval > capacity) {
-      kno_seterr(kno_PoolOverflow,"rocksdb_pool_create",spec,load_arg);
-      rv = -1;}
-    else NO_ELSE;}
-  else if ( (FALSEP(load_arg)) || (EMPTYP(load_arg)) ||
-	    (VOIDP(load_arg)) || (load_arg == KNO_DEFAULT_VALUE)) {}
-  else {
-    kno_seterr("Not a valid load","rocksdb_pool_create",spec,load_arg);
-    rv = -1;}
-
-  if (rv>=0)
-    dbpool = kno_make_rocksdb_pool(spec,base_oid,capacity_arg,opts);
-
-  if (dbpool == NULL) rv=-1;
-
-  kno_decref(base_oid);
-  kno_decref(capacity_arg);
-  kno_decref(load_arg);
-  kno_decref(metadata);
-
-  if (rv>=0) {
-    kno_set_file_opts(spec,opts);
-    return kno_open_pool(spec,storage_flags,opts);}
-  else return NULL;
-}
-
-static kno_pool rocksdb_pool_open(u8_string spec,kno_storage_flags flags,lispval opts)
-{
-  return kno_open_rocksdb_pool(spec,flags,opts);
-}
-
-static void recycle_rocksdb_pool(kno_pool p)
-{
-  struct KNO_ROCKSDB_POOL *db = (kno_rocksdb_pool) p;
-  kno_close_rocksdb(&(db->rocksdb));
-  kno_recycle_xrefs(&(db->rocksdb.xrefs));
-  if (db->rocksdb.path) {
-    u8_free(db->rocksdb.path);
-    db->rocksdb.path = NULL;}
-  kno_decref(db->rocksdb.opts);
-  if (db->rocksdb.writeopts)
-    rocksdb_writeoptions_destroy(db->rocksdb.writeopts);
-  rocksdb_options_destroy(db->rocksdb.optionsptr);
-
-}
-
-/* The Rocksdb pool handler */
-
-static struct KNO_POOL_HANDLER rocksdb_pool_handler={
-  "rocksdb_pool", 1, sizeof(struct KNO_ROCKSDB_POOL), 12,
-  rocksdb_pool_close, /* close */
-  rocksdb_pool_alloc, /* alloc */
-  rocksdb_pool_fetchoid, /* fetch */
-  rocksdb_pool_fetchn, /* fetchn */
-  rocksdb_pool_getload, /* getload */
-  rocksdb_pool_lock, /* lock */
-  rocksdb_pool_unlock, /* release */
-  rocksdb_pool_commit, /* commit */
-  NULL, /* swapout */
-  rocksdb_pool_create, /* create */
-  NULL,  /* walk */
-  recycle_rocksdb_pool, /* recycle */
-  NULL  /* poolctl */
-};
 
 /* Rocksdb indexes */
 
@@ -1892,7 +1505,7 @@ static lispval rocksdb_index_fetch(kno_index ix,lispval key)
   struct KNO_ROCKSDB_INDEX *lx = (kno_rocksdb_index)ix;
   struct KNO_ROCKSDB *db = &(lx->rocksdb);
   KNO_DECL_OUTBUF(keybuf,1000);
-  ssize_t len = kno_write_xtype(&keybuf,key,);
+  ssize_t len = db_write_xtype(db,&keybuf,key);
   if (len<0) {
     kno_close_outbuf(&keybuf);
     return KNO_ERROR_VALUE;}
@@ -2274,6 +1887,515 @@ static struct KNO_INDEX_HANDLER rocksdb_index_handler={
   NULL /* indexctl */
 };
 
+#endif
+
+/* Rocksdb pool backends */
+
+static struct KNO_POOL_HANDLER rocksdb_pool_handler;
+
+KNO_EXPORT
+kno_pool kno_open_rocksdb_pool(u8_string path,kno_storage_flags flags,lispval opts)
+{
+  struct KNO_ROCKSDB_POOL *pool = u8_alloc(struct KNO_ROCKSDB_POOL);
+  if (kno_setup_rocksdb(&(pool->rocksdb),path,opts)) {
+    rocksdb_t *dbptr = pool->rocksdb.dbptr;
+    lispval base = get_prop(dbptr,"\377BASE",KNO_VOID);
+    lispval cap = get_prop(dbptr,"\377CAPACITY",KNO_VOID);
+    lispval load = get_prop(dbptr,"\377LOAD",KNO_VOID);
+    lispval metadata = get_prop(dbptr,"\377METADATA",KNO_VOID);
+    lispval slotcodes = get_prop(dbptr,"\377SLOTIDS",KNO_VOID);
+    if ((KNO_OIDP(base)) && (KNO_UINTP(cap)) && (KNO_UINTP(load))) {
+      u8_string realpath = u8_realpath(path,NULL);
+      u8_string abspath = u8_abspath(path,NULL);
+      lispval adjunct_opt = kno_getopt(opts,SYM("ADJUNCT"),KNO_VOID);
+      lispval read_only_opt = kno_getopt(opts,SYM("READONLY"),KNO_VOID);
+      lispval label = get_prop(dbptr,"\377LABEL",KNO_VOID);
+      kno_init_pool((kno_pool)pool,
+		    KNO_OID_ADDR(base),KNO_FIX2INT(cap),
+		    &rocksdb_pool_handler,
+		    path,abspath,realpath,
+		    KNO_STORAGE_ISPOOL,metadata,opts);
+      u8_free(realpath);
+      u8_free(abspath);
+      if (KNO_VOIDP(read_only_opt))
+	read_only_opt = get_prop(dbptr,"\377READONLY",KNO_VOID);
+      if (KNO_VOIDP(read_only_opt))
+	adjunct_opt = get_prop(dbptr,"\377ADJUNCT",KNO_VOID);
+      if ( (! KNO_VOIDP(read_only_opt)) && (KNO_TRUEP(read_only_opt)) )
+	pool->pool_flags |= KNO_STORAGE_READ_ONLY;
+      if ( (! KNO_VOIDP(adjunct_opt)) && (!(KNO_FALSEP(adjunct_opt))) )
+	pool->pool_flags |= KNO_POOL_ADJUNCT;
+      pool->pool_load = KNO_FIX2INT(load);
+      if (KNO_STRINGP(label)) {
+	pool->pool_label = u8_strdup(KNO_CSTRING(label));}
+      if (KNO_SLOTMAPP(metadata)) {
+	kno_copy_slotmap((kno_slotmap)metadata,
+			 &(pool->pool_metadata));
+	kno_set_modified(((lispval)(&(pool->pool_metadata))),0);}
+      kno_decref(adjunct_opt); kno_decref(read_only_opt);
+      kno_decref(metadata); kno_decref(label);
+      kno_decref(base); kno_decref(cap); kno_decref(load);
+      kno_decref(slotcodes);
+      kno_register_pool((kno_pool)pool);
+      return (kno_pool)pool;}
+    else  {
+      kno_decref(base); kno_decref(cap); kno_decref(load);
+      kno_decref(slotcodes); kno_decref(metadata);
+      kno_close_rocksdb(&(pool->rocksdb));
+      u8_free(pool);
+      kno_seterr("NotAPoolDB","kno_rocksdb_pool",NULL,KNO_VOID);
+      return (kno_pool)NULL;}}
+  else return NULL;
+}
+
+KNO_EXPORT
+kno_pool kno_make_rocksdb_pool(u8_string path,
+			       lispval base,
+			       lispval cap,
+			       lispval opts)
+{
+  lispval load = kno_getopt(opts,SYM("LOAD"),KNO_FIXZERO);
+
+  if ((!(KNO_OIDP(base)))||(!(KNO_UINTP(cap)))||(!(KNO_UINTP(load)))) {
+    kno_seterr("Not enough information to create a pool",
+	       "kno_make_rocksdb_pool",path,opts);
+    return (kno_pool)NULL;}
+
+  struct KNO_ROCKSDB_POOL *pool = u8_alloc(struct KNO_ROCKSDB_POOL);
+
+  if (kno_setup_rocksdb(&(pool->rocksdb),path,opts)) {
+    rocksdb_t *dbptr = pool->rocksdb.dbptr;
+    lispval label = kno_getopt(opts,SYM("LABEL"),KNO_VOID);
+    lispval metadata = kno_getopt(opts,SYM("METADATA"),KNO_VOID);
+    lispval given_base = get_prop(dbptr,"\377BASE",KNO_VOID);
+    lispval given_cap = get_prop(dbptr,"\377CAPACITY",KNO_VOID);
+    lispval given_load = get_prop(dbptr,"\377LOAD",KNO_VOID);
+    lispval cur_label = get_prop(dbptr,"\377LABEL",KNO_VOID);
+    lispval cur_metadata = get_prop(dbptr,"\377METADATA",KNO_VOID);
+    lispval ctime_val = kno_getopt(opts,kno_intern("ctime"),KNO_VOID);
+    lispval mtime_val = kno_getopt(opts,kno_intern("mtime"),KNO_VOID);
+    lispval generation_val = kno_getopt(opts,kno_intern("generation"),KNO_VOID);
+    lispval slotids = kno_getopt(opts,kno_intern("slotids"),KNO_VOID);
+
+    u8_string realpath = u8_realpath(path,NULL);
+    u8_string abspath = u8_abspath(path,NULL);
+    time_t now=time(NULL), ctime, mtime;
+
+    if (!((KNO_VOIDP(given_base))||(KNO_EQUALP(base,given_base)))) {
+      u8_free(pool); u8_free(realpath); u8_free(abspath);
+      kno_seterr("Conflicting base OIDs",
+		 "kno_make_rocksdb_pool",path,opts);
+      return NULL;}
+    if (!((KNO_VOIDP(given_cap))||(KNO_EQUALP(cap,given_cap)))) {
+      u8_free(pool); u8_free(realpath); u8_free(abspath);
+      kno_seterr("Conflicting pool capacities",
+		 "kno_make_rocksdb_pool",path,opts);
+      return NULL;}
+    if (!(KNO_VOIDP(label))) {
+      if (!(KNO_EQUALP(label,cur_label)))
+	set_prop(dbptr,"\377LABEL",label,sync_writeopts);}
+
+    set_prop(dbptr,"\377BASE",base,sync_writeopts);
+    set_prop(dbptr,"\377CAPACITY",cap,sync_writeopts);
+
+    if (KNO_VOIDP(given_load))
+      set_prop(dbptr,"\377LOAD",load,sync_writeopts);
+
+    if (KNO_SLOTMAPP(metadata)) {
+      if ( (KNO_VOIDP(cur_metadata)) || (kno_testopt(opts,SYM("FORCE"),KNO_VOID)) ) {
+	set_prop(dbptr,"\377METADATA",metadata,sync_writeopts);}
+      else u8_log(LOG_WARN,"ExistingMetadata",
+		  "Not overwriting existing metatdata in rocksdb pool %s:",
+		  path,cur_metadata);}
+
+    kno_init_pool((kno_pool)pool,
+		  KNO_OID_ADDR(base),KNO_FIX2INT(cap),
+		  &rocksdb_pool_handler,
+		  path,abspath,realpath,
+		  KNO_STORAGE_ISPOOL,
+		  metadata,
+		  opts);
+
+    if (KNO_FIXNUMP(ctime_val))
+      ctime = (time_t) KNO_FIX2INT(ctime_val);
+    else if (KNO_PRIM_TYPEP(ctime_val,kno_timestamp_type)) {
+      struct KNO_TIMESTAMP *moment = (kno_timestamp) ctime_val;
+      ctime = moment->u8xtimeval.u8_tick;}
+    else ctime=now;
+    kno_decref(ctime_val);
+    ctime_val = kno_time2timestamp(ctime);
+    set_prop(dbptr,"\377CTIME",ctime_val,sync_writeopts);
+
+    if (KNO_FIXNUMP(mtime_val))
+      mtime = (time_t) KNO_FIX2INT(mtime_val);
+    else if (KNO_PRIM_TYPEP(mtime_val,kno_timestamp_type)) {
+      struct KNO_TIMESTAMP *moment = (kno_timestamp) mtime_val;
+      mtime = moment->u8xtimeval.u8_tick;}
+    else mtime=now;
+    kno_decref(mtime_val);
+    mtime_val = kno_time2timestamp(mtime);
+    set_prop(dbptr,"\377MTIME",mtime_val,sync_writeopts);
+
+    if (KNO_FIXNUMP(generation_val))
+      set_prop(dbptr,"\377GENERATION",generation_val,sync_writeopts);
+    else set_prop(dbptr,"\377GENERATION",KNO_INT(0),sync_writeopts);
+
+    pool->pool_flags = kno_get_dbflags(opts,KNO_STORAGE_ISPOOL);
+    pool->pool_flags &= ~KNO_STORAGE_READ_ONLY;
+    pool->pool_load = KNO_FIX2INT(load);
+
+    if (KNO_STRINGP(label)) {
+      pool->pool_label = u8_strdup(KNO_CSTRING(label));}
+
+    kno_decref(slotids);
+    kno_decref(metadata);
+    kno_decref(generation_val);
+    kno_decref(ctime_val);
+    kno_decref(mtime_val);
+    u8_free(realpath);
+    u8_free(abspath);
+
+    kno_register_pool((kno_pool)pool);
+
+    return (kno_pool)pool;}
+  else  {
+    kno_close_rocksdb(&(pool->rocksdb));
+    u8_free(pool);
+    kno_seterr("NotAPoolDB","kno_rocksdb_pool",NULL,KNO_VOID);
+    return (kno_pool)NULL;}
+}
+
+static lispval read_oid_value(kno_rocksdb_pool p,struct KNO_INBUF *in)
+{
+  return kno_read_xtype(in,&(p->rocksdb.xrefs));
+}
+
+static ssize_t write_oid_value(kno_rocksdb_pool p,
+			       struct KNO_OUTBUF *out,
+			       lispval value)
+{
+  return db_write_xtype(&(p->rocksdb),out,value);
+}
+
+static lispval get_oid_value(kno_rocksdb_pool ldp,unsigned int offset)
+{
+  ssize_t data_size; char *errmsg = NULL;
+  rocksdb_t *dbptr = ldp->rocksdb.dbptr;
+  rocksdb_readoptions_t *readopts = ldp->rocksdb.readopts;
+  unsigned char keybuf[5];
+  keybuf[0]=0xFE;
+  keybuf[1]=((offset>>24)&0XFF);
+  keybuf[2]=((offset>>16)&0XFF);
+  keybuf[3]=((offset>>8)&0XFF);
+  keybuf[4]=(offset&0XFF);
+  unsigned char *buf = rocksdb_get
+    (dbptr,readopts,keybuf,5,&data_size,&errmsg);
+  if (buf) {
+    lispval result = KNO_VOID;
+    struct KNO_INBUF in = { 0 };
+    KNO_INIT_BYTE_INPUT(&in,buf,data_size);
+    result = read_oid_value(ldp,&in);
+    u8_free(buf);
+    return result;}
+  else if (errmsg)
+    return kno_err(RocksDB_Error,"get_prop",NULL,KNO_VOID);
+  else return KNO_VOID;
+}
+
+static int queue_oid_value(kno_rocksdb_pool ldp,
+			   unsigned int offset,
+			   lispval value,
+			   rocksdb_writebatch_t *batch)
+{
+  struct KNO_OUTBUF out = { 0 };
+  ssize_t dtype_len;
+  unsigned char buf[5];
+  buf[0]=0xFE;
+  buf[1]=((offset>>24)&0XFF);
+  buf[2]=((offset>>16)&0XFF);
+  buf[3]=((offset>>8)&0XFF);
+  buf[4]=(offset&0XFF);
+  KNO_INIT_BYTE_OUTPUT(&out,512);
+  if ((dtype_len = write_oid_value(ldp,&out,value))>0) {
+    rocksdb_writebatch_put
+      (batch,buf,5,out.buffer,out.bufwrite-out.buffer);
+    kno_close_outbuf(&out);
+    return dtype_len;}
+  else return -1;
+}
+
+static lispval rocksdb_pool_alloc(kno_pool p,int n)
+{
+  lispval results = KNO_EMPTY_CHOICE; unsigned int i = 0, start;
+  struct KNO_ROCKSDB_POOL *pool = (struct KNO_ROCKSDB_POOL *)p;
+  kno_lock_pool_struct(p,1);
+  if (pool->pool_load+n>=pool->pool_capacity) {
+    kno_unlock_pool_struct(p);
+    return kno_err(kno_ExhaustedPool,"rocksdb_pool_alloc",pool->poolid,KNO_VOID);}
+  start = pool->pool_load;
+  pool->pool_load = start+n;
+  kno_unlock_pool_struct(p);
+  while (i < n) {
+    KNO_OID new_addr = KNO_OID_PLUS(pool->pool_base,start+i);
+    lispval new_oid = kno_make_oid(new_addr);
+    KNO_ADD_TO_CHOICE(results,new_oid);
+    i++;}
+  return results;
+}
+
+static lispval rocksdb_pool_fetchoid(kno_pool p,lispval oid)
+{
+  struct KNO_ROCKSDB_POOL *pool = (struct KNO_ROCKSDB_POOL *)p;
+  KNO_OID addr = KNO_OID_ADDR(oid);
+  unsigned int offset = KNO_OID_DIFFERENCE(addr,pool->pool_base);
+  return get_oid_value(pool,offset);
+}
+
+struct OFFSET_ENTRY {
+  unsigned int oid_offset;
+  unsigned int fetch_offset;};
+
+static int off_compare(const void *x,const void *y)
+{
+  const struct OFFSET_ENTRY *ex = x, *ey = y;
+  if (ex->oid_offset<ey->oid_offset) return -1;
+  else if (ex->oid_offset>ey->oid_offset) return 1;
+  else return 0;
+}
+
+static lispval *rocksdb_pool_fetchn(kno_pool p,int n,lispval *oids)
+{
+  struct KNO_ROCKSDB_POOL *pool = (struct KNO_ROCKSDB_POOL *)p;
+  struct OFFSET_ENTRY *entries = u8_alloc_n(n,struct OFFSET_ENTRY);
+  rocksdb_readoptions_t *readopts = pool->rocksdb.readopts;
+  unsigned int largest_offset = 0, offsets_sorted = 1;
+  lispval *values = u8_big_alloc_n(n,lispval);
+  KNO_OID base = p->pool_base;
+  int i = 0; while (i<n) {
+    KNO_OID addr = KNO_OID_ADDR(oids[i]);
+    unsigned int offset = KNO_OID_DIFFERENCE(addr,base);
+    entries[i].oid_offset = KNO_OID_DIFFERENCE(addr,base);
+    entries[i].fetch_offset = i;
+    if (offsets_sorted) {
+      if (offset>=largest_offset) largest_offset = offset;
+      else offsets_sorted = 0;}
+    i++;}
+  if (!(offsets_sorted)) {
+    qsort(entries,n,sizeof(struct OFFSET_ENTRY),off_compare);}
+  rocksdb_iterator_t *iterator=
+    rocksdb_create_iterator(pool->rocksdb.dbptr,readopts);
+  i = 0; while (i<n) {
+    unsigned char keybuf[5];
+    unsigned int offset = entries[i].oid_offset;
+    unsigned int fetch_offset = entries[i].fetch_offset;
+    keybuf[0]=0xFE;
+    keybuf[1]=((offset>>24)&0XFF);
+    keybuf[2]=((offset>>16)&0XFF);
+    keybuf[3]=((offset>>8)&0XFF);
+    keybuf[4]=(offset&0XFF);
+    rocksdb_iter_seek(iterator,keybuf,5);
+    ssize_t bytes_len;
+    const unsigned char *bytes = rocksdb_iter_value(iterator,&bytes_len);
+    if (bytes) {
+      struct KNO_INBUF in = { 0 };
+      KNO_INIT_BYTE_INPUT(&in,bytes,bytes_len);
+      lispval oidvalue = read_oid_value(pool,&in);
+      values[fetch_offset]=oidvalue;}
+    else values[fetch_offset]=KNO_VOID;
+    i++;}
+  rocksdb_iter_destroy(iterator);
+  u8_free(entries);
+  return values;
+}
+
+static int rocksdb_pool_getload(kno_pool p)
+{
+  struct KNO_ROCKSDB_POOL *pool = (struct KNO_ROCKSDB_POOL *)p;
+  return pool->pool_load;
+}
+
+static int rocksdb_pool_lock(kno_pool p,lispval oids)
+{
+  /* What should this really do? */
+  return 1;
+}
+
+static int rocksdb_pool_unlock(kno_pool p,lispval oids)
+{
+  /* What should this really do? Flush edits to disk? storen? */
+  return 1;
+}
+
+static void rocksdb_pool_close(kno_pool p)
+{
+  struct KNO_ROCKSDB_POOL *pool = (struct KNO_ROCKSDB_POOL *)p;
+  kno_close_rocksdb(&(pool->rocksdb));
+}
+
+
+static int rocksdb_pool_storen(kno_pool p,int n,lispval *oids,lispval *values)
+{
+  struct KNO_ROCKSDB_POOL *pool = (struct KNO_ROCKSDB_POOL *)p;
+  rocksdb_t *dbptr = pool->rocksdb.dbptr;
+  int i = 0, errval = 0;
+  char *errmsg = NULL;
+  rocksdb_writebatch_t *batch = rocksdb_writebatch_create();
+  ssize_t n_bytes = 0;
+  while (i<n) {
+    lispval oid = oids[i], value = values[i];
+    KNO_OID addr = KNO_OID_ADDR(oid);
+    unsigned int offset = KNO_OID_DIFFERENCE(addr,pool->pool_base);
+    if (offset >= pool->pool_load) {
+      if ( (pool->pool_flags) & KNO_POOL_ADJUNCT )
+	pool->pool_load = offset+1;
+      else {
+	kno_seterr("Saving unallocated OID","rocksdb_pool_storen",
+		   p->poolid,oid);
+	errval=-1; break;}}
+    ssize_t len = queue_oid_value(pool,offset,value,batch);
+    if (len<0) {errval = len; break;}
+    else {n_bytes+=len; i++;}}
+  if (errval>=0) {
+    kno_lock_pool_struct(p,1); {
+      KNO_DECL_OUTBUF(loadout,10);
+      kno_write_byte(&loadout,xt_posint);
+      kno_write_varint(&loadout,pool->pool_load);
+      rocksdb_writebatch_put(batch,"\377LOAD",strlen("\377LOAD"),
+			     loadout.buffer,BUFIO_POINT(&loadout));}
+    kno_unlock_pool_struct(p);
+    if (errval>=0) {
+      rocksdb_write(dbptr,sync_writeopts,batch,&errmsg);
+      if (errmsg) {
+	u8_seterr(RocksDB_Error,"rocksdb_pool_storen",errmsg);
+	errval = -1;}}
+    rocksdb_writebatch_destroy(batch);}
+  if (errval<0)
+    return errval;
+  else return n;
+}
+
+static int rocksdb_pool_commit(kno_pool p,kno_commit_phase phase,
+			       struct KNO_POOL_COMMITS *commits)
+{
+  switch (phase) {
+  case kno_commit_start:
+    return 0;
+  case kno_commit_write:
+    return rocksdb_pool_storen(p,commits->commit_count,
+			       commits->commit_oids,
+			       commits->commit_vals);
+  case kno_commit_sync:
+    return 0;
+  case kno_commit_rollback:
+    return 0;
+  case kno_commit_cleanup:
+    return 0;
+  default:
+    return 0;
+  }
+}
+
+/* Creating rocksdb pools */
+
+static kno_pool rocksdb_pool_create(u8_string spec,void *type_data,
+				    kno_storage_flags storage_flags,
+				    lispval opts)
+{
+  lispval base_oid = kno_getopt(opts,kno_intern("base"),VOID);
+  lispval capacity_arg = kno_getopt(opts,kno_intern("capacity"),VOID);
+  lispval load_arg = kno_getopt(opts,kno_intern("load"),VOID);
+  lispval metadata = kno_getopt(opts,kno_intern("metadata"),VOID);
+  unsigned int capacity;
+  kno_pool dbpool = NULL;
+  int rv = 0;
+  if (u8_file_existsp(spec)) {
+    kno_seterr(_("FileAlreadyExists"),"rocksdb_pool_create",spec,VOID);
+    return NULL;}
+  else if (!(OIDP(base_oid))) {
+    kno_seterr("Not a base oid","rocksdb_pool_create",spec,base_oid);
+    rv = -1;}
+  else if (KNO_ISINT(capacity_arg)) {
+    int capval = kno_getint(capacity_arg);
+    if (capval<=0) {
+      kno_seterr("Not a valid capacity","rocksdb_pool_create",
+		 spec,capacity_arg);
+      rv = -1;}
+    else capacity = capval;}
+  else {
+    kno_seterr("Not a valid capacity","rocksdb_pool_create",
+	       spec,capacity_arg);
+    rv = -1;}
+  if (rv<0) {}
+  else if (KNO_ISINT(load_arg)) {
+    int loadval = kno_getint(load_arg);
+    if (loadval<0) {
+      kno_seterr("Not a valid load","rocksdb_pool_create",spec,load_arg);
+      rv = -1;}
+    else if (loadval > capacity) {
+      kno_seterr(kno_PoolOverflow,"rocksdb_pool_create",spec,load_arg);
+      rv = -1;}
+    else NO_ELSE;}
+  else if ( (FALSEP(load_arg)) || (EMPTYP(load_arg)) ||
+	    (VOIDP(load_arg)) || (load_arg == KNO_DEFAULT_VALUE)) {}
+  else {
+    kno_seterr("Not a valid load","rocksdb_pool_create",spec,load_arg);
+    rv = -1;}
+
+  if (rv>=0)
+    dbpool = kno_make_rocksdb_pool(spec,base_oid,capacity_arg,opts);
+
+  if (dbpool == NULL) rv=-1;
+
+  kno_decref(base_oid);
+  kno_decref(capacity_arg);
+  kno_decref(load_arg);
+  kno_decref(metadata);
+
+  if (rv>=0) {
+    kno_set_file_opts(spec,opts);
+    return kno_open_pool(spec,storage_flags,opts);}
+  else return NULL;
+}
+
+static kno_pool rocksdb_pool_open(u8_string spec,kno_storage_flags flags,lispval opts)
+{
+  return kno_open_rocksdb_pool(spec,flags,opts);
+}
+
+static void recycle_rocksdb_pool(kno_pool p)
+{
+  struct KNO_ROCKSDB_POOL *db = (kno_rocksdb_pool) p;
+  kno_close_rocksdb(&(db->rocksdb));
+  kno_recycle_xrefs(&(db->rocksdb.xrefs));
+  if (db->rocksdb.path) {
+    u8_free(db->rocksdb.path);
+    db->rocksdb.path = NULL;}
+  kno_decref(db->rocksdb.opts);
+  if (db->rocksdb.writeopts)
+    rocksdb_writeoptions_destroy(db->rocksdb.writeopts);
+  rocksdb_options_destroy(db->rocksdb.optionsptr);
+
+}
+
+/* The Rocksdb pool handler */
+
+static struct KNO_POOL_HANDLER rocksdb_pool_handler={
+  "rocksdb_pool", 1, sizeof(struct KNO_ROCKSDB_POOL), 12,
+  rocksdb_pool_close, /* close */
+  rocksdb_pool_alloc, /* alloc */
+  rocksdb_pool_fetchoid, /* fetch */
+  rocksdb_pool_fetchn, /* fetchn */
+  rocksdb_pool_getload, /* getload */
+  rocksdb_pool_lock, /* lock */
+  rocksdb_pool_unlock, /* release */
+  rocksdb_pool_commit, /* commit */
+  NULL, /* swapout */
+  rocksdb_pool_create, /* create */
+  NULL,  /* walk */
+  recycle_rocksdb_pool, /* recycle */
+  NULL  /* poolctl */
+};
+
 /* Scheme primitives */
 
 DEFPRIM2("rocksdb/use-pool",use_rocksdb_pool_prim,KNO_MAX_ARGS(2)|KNO_MIN_ARGS(1),
@@ -2295,8 +2417,6 @@ static lispval make_rocksdb_pool_prim(lispval path,lispval base,lispval cap,
   kno_pool pool = kno_make_rocksdb_pool(KNO_CSTRING(path),base,cap,opts);
   return kno_pool2lisp(pool);
 }
-
-#endif
 
 /* Table functions */
 
@@ -2400,7 +2520,6 @@ KNO_EXPORT int kno_init_rocksdb()
 		      kno_intconfig_get,kno_intconfig_set,
 		      &default_restart_interval);
 
-#if 0
   kno_register_pool_type
     ("rocksdb",
      &rocksdb_pool_handler,
@@ -2408,6 +2527,7 @@ KNO_EXPORT int kno_init_rocksdb()
      rocksdb_matcher,
      NULL);
 
+#if 0
   kno_register_index_type
     ("rocksdb",
      &rocksdb_index_handler,
@@ -2444,36 +2564,20 @@ static void link_local_cprims()
   KNO_LINK_PRIM("rocksdb/open",rocksdb_open_prim,2,rocksdb_module);
 
   KNO_LINK_TYPED("rocksdb/close",rocksdb_close_prim,1,rocksdb_module,
-		 kno_rocksdb_type,KNO_VOID)
-
-
-
-    KNO_LINK_TYPED("rocksdb/reopen",rocksdb_reopen_prim,1,rocksdb_module,
-		   kno_rocksdb_type,KNO_VOID)
-
-
-
-    KNO_LINK_TYPED("rocksdb/get",rocksdb_get_prim,3,rocksdb_module,
-		   kno_rocksdb_type,KNO_VOID,kno_any_type,KNO_VOID,
-		   kno_any_type,KNO_VOID)
-
-
-
-    KNO_LINK_TYPED("rocksdb/put!",rocksdb_put_prim,4,rocksdb_module,
-		   kno_rocksdb_type,KNO_VOID,kno_any_type,KNO_VOID,
-		   kno_any_type,KNO_VOID,kno_any_type,KNO_VOID)
-
-
-
-    KNO_LINK_TYPED("rocksdb/drop!",rocksdb_drop_prim,3,rocksdb_module,
-		   kno_rocksdb_type,KNO_VOID,kno_any_type,KNO_VOID,
-		   kno_any_type,KNO_VOID)
-
-    KNO_LINK_TYPED("rocksdb/reopen",rocksdb_reopen_prim,1,rocksdb_module,
-		   kno_rocksdb_type,KNO_VOID);
-
-
-
+		 kno_rocksdb_type,KNO_VOID);
+  KNO_LINK_TYPED("rocksdb/reopen",rocksdb_reopen_prim,1,rocksdb_module,
+		 kno_rocksdb_type,KNO_VOID);
+  KNO_LINK_TYPED("rocksdb/get",rocksdb_get_prim,3,rocksdb_module,
+		 kno_rocksdb_type,KNO_VOID,kno_any_type,KNO_VOID,
+		 kno_any_type,KNO_VOID);
+  KNO_LINK_TYPED("rocksdb/put!",rocksdb_put_prim,4,rocksdb_module,
+		 kno_rocksdb_type,KNO_VOID,kno_any_type,KNO_VOID,
+		 kno_any_type,KNO_VOID,kno_any_type,KNO_VOID);
+  KNO_LINK_TYPED("rocksdb/drop!",rocksdb_drop_prim,3,rocksdb_module,
+		 kno_rocksdb_type,KNO_VOID,kno_any_type,KNO_VOID,
+		 kno_any_type,KNO_VOID);
+  KNO_LINK_TYPED("rocksdb/reopen",rocksdb_reopen_prim,1,rocksdb_module,
+		 kno_rocksdb_type,KNO_VOID);
   KNO_LINK_TYPED("rocksdb/getn",rocksdb_getn_prim,3,rocksdb_module,
 		 kno_rocksdb_type,KNO_VOID,kno_vector_type,KNO_VOID,
 		 kno_any_type,KNO_VOID);
