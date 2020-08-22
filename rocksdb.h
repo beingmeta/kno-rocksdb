@@ -1,6 +1,6 @@
 typedef struct KNO_ROCKSDB {
   u8_string path; lispval opts;
-  unsigned int readonly:1;
+  unsigned int readonly, saved_xrefs;
   enum rocksdb_status {
     rocksdb_raw = 0,
     rocksdb_sketchy,
@@ -10,7 +10,6 @@ typedef struct KNO_ROCKSDB {
     rocksdb_closing,
     rocksdb_error } dbstatus;
   struct XTYPE_REFS xrefs;
-  int saved_xrefs;
   U8_MUTEX_DECL(rocksdb_lock);
   struct rocksdb_t *dbptr;
   struct rocksdb_options_t *optionsptr;
