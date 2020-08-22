@@ -43,6 +43,12 @@ ARCH            ::= $(shell ${KNOBUILD} getbuildopt BUILD_ARCH || uname -m)
 APKREPO         ::= $(shell ${KNOBUILD} getbuildopt APKREPO /srv/repo/kno/apk)
 APK_ARCH_DIR      = ${APKREPO}/staging/${ARCH}
 
+# Meta targets
+
+# .buildmode contains the default build target (standard|debugging)
+# debug/normal targets change the buildmode
+# module build targets depend on .buildmode
+
 default build: .buildmode
 	make $(shell cat .buildmode)
 
@@ -62,6 +68,8 @@ debug:
 normal:
 	echo standard > .buildmode
 	make
+
+# Basic targets
 
 rocksdb.o: rocksdb.c makefile .buildmode
 	@$(CC) $(CFLAGS) -o $@ -c $<
