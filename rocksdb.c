@@ -39,7 +39,7 @@
 
 
 kno_lisp_type kno_rocksdb_type;
-#define KNO_ROCKSDB_TYPE kno_any_type
+#define KNO_ROCKSDB_TYPE 0xeff34eb55eee34L
 
 static ssize_t default_writebuf_size = -1;
 static ssize_t default_cache_size = -1;
@@ -330,8 +330,8 @@ KNO_DEFCPRIM("rocksdb/open",rocksdb_open_prim,
 	     KNO_MAX_ARGS(2)|KNO_MIN_ARGS(1),
 	     "`(ROCKSDB/OPEN *arg0* [*arg1*])` "
 	     "**undocumented**",
-	     "path",kno_string_type,KNO_VOID,
-	     "opts",kno_any_type,KNO_VOID)
+	     {"path",kno_string_type,KNO_VOID},
+	     {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_open_prim(lispval path,lispval opts)
 {
   struct KNO_ROCKSDB_CONS *db = u8_alloc(struct KNO_ROCKSDB_CONS);
@@ -349,7 +349,7 @@ KNO_DEFCPRIM("rocksdb?",rocksdbp_prim,
 	     KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
 	     "`(ROCKSDB? *arg0*)` "
 	     "**undocumented**",
-	     "arg",kno_any_type,KNO_VOID)
+	     {"arg",kno_any_type,KNO_VOID})
 static lispval rocksdbp_prim(lispval arg)
 {
   if (KNO_TYPEP(arg,kno_rocksdb_type))
@@ -362,7 +362,7 @@ KNO_DEFCPRIM("rocksdb/close",rocksdb_close_prim,
 	     KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
 	     "`(ROCKSDB/CLOSE *arg0*)` "
 	     "**undocumented**",
-	     "rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID)
+	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID})
 static lispval rocksdb_close_prim(lispval rocksdb)
 {
   struct KNO_ROCKSDB_CONS *db = (kno_rocksdb_cons)rocksdb;
@@ -374,7 +374,7 @@ static lispval rocksdb_close_prim(lispval rocksdb)
 KNO_DEFCPRIM("rocksdb/reopen",rocksdb_reopen_prim,
 	     KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
 	     "`(rocksdb/reopen *db*)` **undocumented**",
-	     "rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID)
+	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID})
 static lispval rocksdb_reopen_prim(lispval rocksdb)
 {
   struct KNO_ROCKSDB_CONS *db = (kno_rocksdb_cons)rocksdb;
@@ -392,9 +392,9 @@ KNO_DEFCPRIM("rocksdb/get",rocksdb_get_prim,
 	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
 	     "`(ROCKSDB/GET *arg0* *arg1* [*arg2*])` "
 	     "**undocumented**",
-	     "rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID,
-	     "key",kno_any_type,KNO_VOID,
-	     "opts",kno_any_type,KNO_VOID)
+	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	     {"key",kno_any_type,KNO_VOID},
+	     {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_get_prim(lispval rocksdb,lispval key,lispval opts)
 {
   struct KNO_ROCKSDB_CONS *db = (kno_rocksdb_cons)rocksdb;
@@ -452,10 +452,10 @@ KNO_DEFCPRIM("rocksdb/put!",rocksdb_put_prim,
 	     KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
 	     "`(ROCKSDB/PUT! *arg0* *arg1* *arg2* [*arg3*])` "
 	     "**undocumented**",
-	     "rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID,
-	     "key",kno_any_type,KNO_VOID,
-	     "value",kno_any_type,KNO_VOID,
-	     "opts",kno_any_type,KNO_VOID)
+	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	     {"key",kno_any_type,KNO_VOID},
+	     {"value",kno_any_type,KNO_VOID},
+	     {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_put_prim(lispval rocksdb,lispval key,lispval value,
 				lispval opts)
 {
@@ -506,9 +506,9 @@ KNO_DEFCPRIM("rocksdb/drop!",rocksdb_drop_prim,
 	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
 	     "`(ROCKSDB/DROP! *arg0* *arg1* [*arg2*])` "
 	     "**undocumented**",
-	     "rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID,
-	     "key",kno_any_type,KNO_VOID,
-	     "opts",kno_any_type,KNO_VOID)
+	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	     {"key",kno_any_type,KNO_VOID},
+	     {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_drop_prim(lispval rocksdb,lispval key,lispval opts)
 {
   char *errmsg = NULL;
@@ -581,9 +581,9 @@ KNO_DEFCPRIM("rocksdb/getn",rocksdb_getn_prim,
 	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
 	     "`(ROCKSDB/GETN *arg0* *arg1* [*arg2*])` "
 	     "**undocumented**",
-	     "rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID,
-	     "keys",kno_vector_type,KNO_VOID,
-	     "opts",kno_any_type,KNO_VOID)
+	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	     {"keys",kno_vector_type,KNO_VOID},
+	     {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_getn_prim(lispval rocksdb,lispval keys,lispval opts)
 {
   struct KNO_ROCKSDB_CONS *dbcons = (kno_rocksdb_cons)rocksdb;
@@ -794,9 +794,9 @@ KNO_DEFCPRIM("rocksdb/prefix/get",rocksdb_prefix_get_prim,
 	     "returns all the key/value pairs (as packets), "
 	     "whose keys begin with the DTYPE representation of "
 	     "*key*.",
-	     "rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID,
-	     "key",kno_any_type,KNO_VOID,
-	     "opts",kno_any_type,KNO_VOID)
+	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	     {"key",kno_any_type,KNO_VOID},
+	     {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_prefix_get_prim(lispval rocksdb,lispval key,lispval opts)
 {
   struct KNO_ROCKSDB_CONS *dbcons = (kno_rocksdb_cons)rocksdb;
@@ -816,9 +816,9 @@ KNO_DEFCPRIM("rocksdb/prefix/getn",rocksdb_prefix_getn_prim,
 	     "returns all the key/value pairs (as packets), "
 	     "whose keys begin with the DTYPE representation of "
 	     "*key*.",
-	     "rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID,
-	     "keys",kno_vector_type,KNO_VOID,
-	     "opts",kno_any_type,KNO_VOID)
+	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	     {"keys",kno_vector_type,KNO_VOID},
+	     {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_prefix_getn_prim(lispval rocksdb,lispval keys,lispval opts)
 {
   struct KNO_ROCKSDB_CONS *dbcons = (kno_rocksdb_cons)rocksdb;
@@ -921,9 +921,9 @@ KNO_DEFCPRIM("rocksdb/index/get",rocksdb_index_get_prim,
 	     "gets values associated with *key* in *db*, using "
 	     "the rocksdb database as an index and options "
 	     "provided in *opts*.",
-	     "rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID,
-	     "key",kno_any_type,KNO_VOID,
-	     "opts",kno_any_type,KNO_VOID)
+	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	     {"key",kno_any_type,KNO_VOID},
+	     {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_index_get_prim(lispval rocksdb,lispval key,lispval opts)
 {
   struct KNO_ROCKSDB_CONS *dbcons = (kno_rocksdb_cons)rocksdb;
@@ -1057,10 +1057,10 @@ KNO_DEFCPRIM("rocksdb/index/add!",rocksdb_index_add_prim,
 	     "Saves *values* in *db*, associating them with "
 	     "*key* and using the rocksdb database as an index "
 	     "with options provided in *opts*.",
-	     "rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID,
-	     "key",kno_any_type,KNO_VOID,
-	     "values",kno_any_type,KNO_VOID,
-	     "opts",kno_any_type,KNO_VOID)
+	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	     {"key",kno_any_type,KNO_VOID},
+	     {"values",kno_any_type,KNO_VOID},
+	     {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_index_add_prim(lispval rocksdb,lispval key,
 				      lispval values,lispval opts)
 {
@@ -2419,8 +2419,8 @@ KNO_DEFCPRIM("rocksdb/use-pool",use_rocksdb_pool_prim,
 	     KNO_MAX_ARGS(2)|KNO_MIN_ARGS(1),
 	     "`(ROCKSDB/USE-POOL *arg0* [*arg1*])` "
 	     "**undocumented**",
-	     "path",kno_string_type,KNO_VOID,
-	     "opts",kno_any_type,KNO_VOID)
+	     {"path",kno_string_type,KNO_VOID},
+	     {"opts",kno_any_type,KNO_VOID})
 static lispval use_rocksdb_pool_prim(lispval path,lispval opts)
 {
   kno_pool pool = kno_open_rocksdb_pool(KNO_CSTRING(path),-1,opts);
@@ -2432,10 +2432,10 @@ KNO_DEFCPRIM("rocksdb/make-pool",make_rocksdb_pool_prim,
 	     KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
 	     "`(ROCKSDB/MAKE-POOL *arg0* *arg1* *arg2* [*arg3*])` "
 	     "**undocumented**",
-	     "path",kno_string_type,KNO_VOID,
-	     "base",kno_oid_type,KNO_VOID,
-	     "cap",kno_fixnum_type,KNO_VOID,
-	     "opts",kno_any_type,KNO_VOID)
+	     {"path",kno_string_type,KNO_VOID},
+	     {"base",kno_oid_type,KNO_VOID},
+	     {"cap",kno_fixnum_type,KNO_VOID},
+	     {"opts",kno_any_type,KNO_VOID})
 static lispval make_rocksdb_pool_prim(lispval path,lispval base,lispval cap,
 				      lispval opts)
 {
@@ -2507,6 +2507,7 @@ KNO_EXPORT int kno_init_rocksdb()
   rocksdb_writeoptions_set_sync(sync_writeopts,1);
 
   kno_rocksdb_type = kno_register_cons_type("RocksDB");
+  kno_add_type_alias(KNO_ROCKSDB_TYPE,kno_rocksdb_type);
 
   kno_unparsers[kno_rocksdb_type]=unparse_rocksdb;
   kno_recyclers[kno_rocksdb_type]=recycle_rocksdb;
@@ -2583,34 +2584,15 @@ static void link_local_cprims()
   KNO_LINK_CPRIM("rocksdb?",rocksdbp_prim,1,rocksdb_module);
   KNO_LINK_CPRIM("rocksdb/open",rocksdb_open_prim,2,rocksdb_module);
 
-  KNO_LINK_TYPED("rocksdb/close",rocksdb_close_prim,1,rocksdb_module,
-		 kno_rocksdb_type,KNO_VOID);
-  KNO_LINK_TYPED("rocksdb/reopen",rocksdb_reopen_prim,1,rocksdb_module,
-		 kno_rocksdb_type,KNO_VOID);
-  KNO_LINK_TYPED("rocksdb/get",rocksdb_get_prim,3,rocksdb_module,
-		 kno_rocksdb_type,KNO_VOID,kno_any_type,KNO_VOID,
-		 kno_any_type,KNO_VOID);
-  KNO_LINK_TYPED("rocksdb/put!",rocksdb_put_prim,4,rocksdb_module,
-		 kno_rocksdb_type,KNO_VOID,kno_any_type,KNO_VOID,
-		 kno_any_type,KNO_VOID,kno_any_type,KNO_VOID);
-  KNO_LINK_TYPED("rocksdb/drop!",rocksdb_drop_prim,3,rocksdb_module,
-		 kno_rocksdb_type,KNO_VOID,kno_any_type,KNO_VOID,
-		 kno_any_type,KNO_VOID);
-  KNO_LINK_TYPED("rocksdb/reopen",rocksdb_reopen_prim,1,rocksdb_module,
-		 kno_rocksdb_type,KNO_VOID);
-  KNO_LINK_TYPED("rocksdb/getn",rocksdb_getn_prim,3,rocksdb_module,
-		 kno_rocksdb_type,KNO_VOID,kno_vector_type,KNO_VOID,
-		 kno_any_type,KNO_VOID);
-  KNO_LINK_TYPED("rocksdb/prefix/get",rocksdb_prefix_get_prim,3,rocksdb_module,
-		 kno_rocksdb_type,KNO_VOID,kno_any_type,KNO_VOID,
-		 kno_any_type,KNO_VOID);
-  KNO_LINK_TYPED("rocksdb/prefix/getn",rocksdb_prefix_getn_prim,3,rocksdb_module,
-		 kno_rocksdb_type,KNO_VOID,kno_vector_type,KNO_VOID,
-		 kno_any_type,KNO_VOID);
-  KNO_LINK_TYPED("rocksdb/index/get",rocksdb_index_get_prim,3,rocksdb_module,
-		 kno_rocksdb_type,KNO_VOID,kno_any_type,KNO_VOID,
-		 kno_any_type,KNO_VOID);
-  KNO_LINK_TYPED("rocksdb/index/add!",rocksdb_index_add_prim,4,rocksdb_module,
-		 kno_rocksdb_type,KNO_VOID,kno_any_type,KNO_VOID,
-		 kno_any_type,KNO_VOID,kno_any_type,KNO_VOID);
+  KNO_LINK_CPRIM("rocksdb/close",rocksdb_close_prim,1,rocksdb_module);
+  KNO_LINK_CPRIM("rocksdb/reopen",rocksdb_reopen_prim,1,rocksdb_module);
+  KNO_LINK_CPRIM("rocksdb/get",rocksdb_get_prim,3,rocksdb_module);
+  KNO_LINK_CPRIM("rocksdb/put!",rocksdb_put_prim,4,rocksdb_module);
+  KNO_LINK_CPRIM("rocksdb/drop!",rocksdb_drop_prim,3,rocksdb_module);
+  KNO_LINK_CPRIM("rocksdb/reopen",rocksdb_reopen_prim,1,rocksdb_module);
+  KNO_LINK_CPRIM("rocksdb/getn",rocksdb_getn_prim,3,rocksdb_module);
+  KNO_LINK_CPRIM("rocksdb/prefix/get",rocksdb_prefix_get_prim,3,rocksdb_module);
+  KNO_LINK_CPRIM("rocksdb/prefix/getn",rocksdb_prefix_getn_prim,3,rocksdb_module);
+  KNO_LINK_CPRIM("rocksdb/index/get",rocksdb_index_get_prim,3,rocksdb_module);
+  KNO_LINK_CPRIM("rocksdb/index/add!",rocksdb_index_add_prim,4,rocksdb_module);
 }
