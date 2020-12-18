@@ -2506,8 +2506,7 @@ KNO_EXPORT int kno_init_rocksdb()
   sync_writeopts = rocksdb_writeoptions_create();
   rocksdb_writeoptions_set_sync(sync_writeopts,1);
 
-  kno_rocksdb_type = kno_register_cons_type("RocksDB");
-  kno_add_type_alias(KNO_ROCKSDB_TYPE,kno_rocksdb_type);
+  kno_rocksdb_type = kno_register_cons_type("RocksDB",KNO_ROCKSDB_TYPE);
 
   kno_unparsers[kno_rocksdb_type]=unparse_rocksdb;
   kno_recyclers[kno_rocksdb_type]=recycle_rocksdb;
