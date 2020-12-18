@@ -328,7 +328,6 @@ static void recycle_rocksdb(struct KNO_RAW_CONS *c)
 
 KNO_DEFCPRIM("rocksdb/open",rocksdb_open_prim,
 	     KNO_MAX_ARGS(2)|KNO_MIN_ARGS(1),
-	     "`(ROCKSDB/OPEN *arg0* [*arg1*])` "
 	     "**undocumented**",
 	     {"path",kno_string_type,KNO_VOID},
 	     {"opts",kno_any_type,KNO_VOID})
@@ -347,7 +346,6 @@ static lispval rocksdb_open_prim(lispval path,lispval opts)
 
 KNO_DEFCPRIM("rocksdb?",rocksdbp_prim,
 	     KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
-	     "`(ROCKSDB? *arg0*)` "
 	     "**undocumented**",
 	     {"arg",kno_any_type,KNO_VOID})
 static lispval rocksdbp_prim(lispval arg)
@@ -360,7 +358,6 @@ static lispval rocksdbp_prim(lispval arg)
 
 KNO_DEFCPRIM("rocksdb/close",rocksdb_close_prim,
 	     KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
-	     "`(ROCKSDB/CLOSE *arg0*)` "
 	     "**undocumented**",
 	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID})
 static lispval rocksdb_close_prim(lispval rocksdb)
@@ -373,7 +370,7 @@ static lispval rocksdb_close_prim(lispval rocksdb)
 
 KNO_DEFCPRIM("rocksdb/reopen",rocksdb_reopen_prim,
 	     KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
-	     "`(rocksdb/reopen *db*)` **undocumented**",
+	     "**undocumented**",
 	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID})
 static lispval rocksdb_reopen_prim(lispval rocksdb)
 {
@@ -390,7 +387,6 @@ static lispval rocksdb_reopen_prim(lispval rocksdb)
 
 KNO_DEFCPRIM("rocksdb/get",rocksdb_get_prim,
 	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
-	     "`(ROCKSDB/GET *arg0* *arg1* [*arg2*])` "
 	     "**undocumented**",
 	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
 	     {"key",kno_any_type,KNO_VOID},
@@ -450,7 +446,6 @@ static lispval rocksdb_get_prim(lispval rocksdb,lispval key,lispval opts)
 
 KNO_DEFCPRIM("rocksdb/put!",rocksdb_put_prim,
 	     KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
-	     "`(ROCKSDB/PUT! *arg0* *arg1* *arg2* [*arg3*])` "
 	     "**undocumented**",
 	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
 	     {"key",kno_any_type,KNO_VOID},
@@ -504,7 +499,6 @@ static lispval rocksdb_put_prim(lispval rocksdb,lispval key,lispval value,
 
 KNO_DEFCPRIM("rocksdb/drop!",rocksdb_drop_prim,
 	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
-	     "`(ROCKSDB/DROP! *arg0* *arg1* [*arg2*])` "
 	     "**undocumented**",
 	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
 	     {"key",kno_any_type,KNO_VOID},
@@ -579,7 +573,6 @@ static struct ROCKSDB_KEYBUF *fetchn(struct KNO_ROCKSDB *db,int n,
 
 KNO_DEFCPRIM("rocksdb/getn",rocksdb_getn_prim,
 	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
-	     "`(ROCKSDB/GETN *arg0* *arg1* [*arg2*])` "
 	     "**undocumented**",
 	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
 	     {"keys",kno_vector_type,KNO_VOID},
@@ -2417,7 +2410,6 @@ static struct KNO_INDEX_HANDLER rocksdb_index_handler={
 
 KNO_DEFCPRIM("rocksdb/use-pool",use_rocksdb_pool_prim,
 	     KNO_MAX_ARGS(2)|KNO_MIN_ARGS(1),
-	     "`(ROCKSDB/USE-POOL *arg0* [*arg1*])` "
 	     "**undocumented**",
 	     {"path",kno_string_type,KNO_VOID},
 	     {"opts",kno_any_type,KNO_VOID})
@@ -2430,7 +2422,6 @@ static lispval use_rocksdb_pool_prim(lispval path,lispval opts)
 
 KNO_DEFCPRIM("rocksdb/make-pool",make_rocksdb_pool_prim,
 	     KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
-	     "`(ROCKSDB/MAKE-POOL *arg0* *arg1* *arg2* [*arg3*])` "
 	     "**undocumented**",
 	     {"path",kno_string_type,KNO_VOID},
 	     {"base",kno_oid_type,KNO_VOID},
