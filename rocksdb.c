@@ -39,7 +39,7 @@
 
 
 kno_lisp_type kno_rocksdb_type;
-#define KNO_ROCKSDB_TYPE 0xeff34eb55eee34L
+#define KNO_ROCKSDB_TYPE 0x584cb00
 
 static ssize_t default_writebuf_size = -1;
 static ssize_t default_cache_size = -1;
