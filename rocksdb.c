@@ -326,7 +326,7 @@ static void recycle_rocksdb(struct KNO_RAW_CONS *c)
 /* Primitives */
 
 
-KNO_DEFCPRIM("rocksdb/open",rocksdb_open_prim,
+DEFC_PRIM("rocksdb/open",rocksdb_open_prim,
 	     KNO_MAX_ARGS(2)|KNO_MIN_ARGS(1),
 	     "**undocumented**",
 	     {"path",kno_string_type,KNO_VOID},
@@ -344,7 +344,7 @@ static lispval rocksdb_open_prim(lispval path,lispval opts)
 }
 
 
-KNO_DEFCPRIM("rocksdb?",rocksdbp_prim,
+DEFC_PRIM("rocksdb?",rocksdbp_prim,
 	     KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
 	     "**undocumented**",
 	     {"arg",kno_any_type,KNO_VOID})
@@ -356,7 +356,7 @@ static lispval rocksdbp_prim(lispval arg)
 }
 
 
-KNO_DEFCPRIM("rocksdb/close",rocksdb_close_prim,
+DEFC_PRIM("rocksdb/close",rocksdb_close_prim,
 	     KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
 	     "**undocumented**",
 	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID})
@@ -368,7 +368,7 @@ static lispval rocksdb_close_prim(lispval rocksdb)
 }
 
 
-KNO_DEFCPRIM("rocksdb/reopen",rocksdb_reopen_prim,
+DEFC_PRIM("rocksdb/reopen",rocksdb_reopen_prim,
 	     KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
 	     "**undocumented**",
 	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID})
@@ -385,7 +385,7 @@ static lispval rocksdb_reopen_prim(lispval rocksdb)
 /* Basic operations */
 
 
-KNO_DEFCPRIM("rocksdb/get",rocksdb_get_prim,
+DEFC_PRIM("rocksdb/get",rocksdb_get_prim,
 	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
 	     "**undocumented**",
 	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
@@ -444,7 +444,7 @@ static lispval rocksdb_get_prim(lispval rocksdb,lispval key,lispval opts)
 }
 
 
-KNO_DEFCPRIM("rocksdb/put!",rocksdb_put_prim,
+DEFC_PRIM("rocksdb/put!",rocksdb_put_prim,
 	     KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
 	     "**undocumented**",
 	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
@@ -497,7 +497,7 @@ static lispval rocksdb_put_prim(lispval rocksdb,lispval key,lispval value,
 }
 
 
-KNO_DEFCPRIM("rocksdb/drop!",rocksdb_drop_prim,
+DEFC_PRIM("rocksdb/drop!",rocksdb_drop_prim,
 	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
 	     "**undocumented**",
 	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
@@ -571,7 +571,7 @@ static struct ROCKSDB_KEYBUF *fetchn(struct KNO_ROCKSDB *db,int n,
 }
 
 
-KNO_DEFCPRIM("rocksdb/getn",rocksdb_getn_prim,
+DEFC_PRIM("rocksdb/getn",rocksdb_getn_prim,
 	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
 	     "**undocumented**",
 	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
@@ -781,7 +781,7 @@ static int prefix_get_iterfn(lispval key,
 }
 
 
-KNO_DEFCPRIM("rocksdb/prefix/get",rocksdb_prefix_get_prim,
+DEFC_PRIM("rocksdb/prefix/get",rocksdb_prefix_get_prim,
 	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
 	     "(ROCKSDB/PREFIX/GET *db* *key* [*opts*]) "
 	     "returns all the key/value pairs (as packets), "
@@ -803,7 +803,7 @@ static lispval rocksdb_prefix_get_prim(lispval rocksdb,lispval key,lispval opts)
 }
 
 
-KNO_DEFCPRIM("rocksdb/prefix/getn",rocksdb_prefix_getn_prim,
+DEFC_PRIM("rocksdb/prefix/getn",rocksdb_prefix_getn_prim,
 	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
 	     "(ROCKSDB/PREFIX/GET *db* *key* [*opts*]) "
 	     "returns all the key/value pairs (as packets), "
@@ -908,7 +908,7 @@ static int index_get_iterfn(lispval key,
 }
 
 
-KNO_DEFCPRIM("rocksdb/index/get",rocksdb_index_get_prim,
+DEFC_PRIM("rocksdb/index/get",rocksdb_index_get_prim,
 	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
 	     "(ROCKSDB/INDEX/GET *db* *key* [*opts*]) "
 	     "gets values associated with *key* in *db*, using "
@@ -1044,7 +1044,7 @@ static ssize_t rocksdb_adder(struct KNO_ROCKSDB *db,lispval key,
 
 
 
-KNO_DEFCPRIM("rocksdb/index/add!",rocksdb_index_add_prim,
+DEFC_PRIM("rocksdb/index/add!",rocksdb_index_add_prim,
 	     KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
 	     "(ROCKSDB/INDEX/ADD! *db* *key* *value [*opts*]) "
 	     "Saves *values* in *db*, associating them with "
@@ -2408,7 +2408,7 @@ static struct KNO_INDEX_HANDLER rocksdb_index_handler={
 /* Scheme primitives */
 
 
-KNO_DEFCPRIM("rocksdb/use-pool",use_rocksdb_pool_prim,
+DEFC_PRIM("rocksdb/use-pool",use_rocksdb_pool_prim,
 	     KNO_MAX_ARGS(2)|KNO_MIN_ARGS(1),
 	     "**undocumented**",
 	     {"path",kno_string_type,KNO_VOID},
@@ -2420,7 +2420,7 @@ static lispval use_rocksdb_pool_prim(lispval path,lispval opts)
 }
 
 
-KNO_DEFCPRIM("rocksdb/make-pool",make_rocksdb_pool_prim,
+DEFC_PRIM("rocksdb/make-pool",make_rocksdb_pool_prim,
 	     KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
 	     "**undocumented**",
 	     {"path",kno_string_type,KNO_VOID},
