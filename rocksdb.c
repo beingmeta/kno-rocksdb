@@ -3,6 +3,7 @@
 /* rocksdb.c
    This implements Kno bindings to rocksdb.
    Copyright (C) 2007-2020 beingmeta, inc.
+   Copyright (C) 2020-2021 beingmeta, LLC
 */
 
 #ifndef _FILEINFO
@@ -327,10 +328,10 @@ static void recycle_rocksdb(struct KNO_RAW_CONS *c)
 
 
 DEFC_PRIM("rocksdb/open",rocksdb_open_prim,
-	     KNO_MAX_ARGS(2)|KNO_MIN_ARGS(1),
-	     "**undocumented**",
-	     {"path",kno_string_type,KNO_VOID},
-	     {"opts",kno_any_type,KNO_VOID})
+	  KNO_MAX_ARGS(2)|KNO_MIN_ARGS(1),
+	  "**undocumented**",
+	  {"path",kno_string_type,KNO_VOID},
+	  {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_open_prim(lispval path,lispval opts)
 {
   struct KNO_ROCKSDB_CONS *db = u8_alloc(struct KNO_ROCKSDB_CONS);
@@ -345,9 +346,9 @@ static lispval rocksdb_open_prim(lispval path,lispval opts)
 
 
 DEFC_PRIM("rocksdb?",rocksdbp_prim,
-	     KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
-	     "**undocumented**",
-	     {"arg",kno_any_type,KNO_VOID})
+	  KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
+	  "**undocumented**",
+	  {"arg",kno_any_type,KNO_VOID})
 static lispval rocksdbp_prim(lispval arg)
 {
   if (KNO_TYPEP(arg,kno_rocksdb_type))
@@ -357,9 +358,9 @@ static lispval rocksdbp_prim(lispval arg)
 
 
 DEFC_PRIM("rocksdb/close",rocksdb_close_prim,
-	     KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
-	     "**undocumented**",
-	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID})
+	  KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
+	  "**undocumented**",
+	  {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID})
 static lispval rocksdb_close_prim(lispval rocksdb)
 {
   struct KNO_ROCKSDB_CONS *db = (kno_rocksdb_cons)rocksdb;
@@ -369,9 +370,9 @@ static lispval rocksdb_close_prim(lispval rocksdb)
 
 
 DEFC_PRIM("rocksdb/reopen",rocksdb_reopen_prim,
-	     KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
-	     "**undocumented**",
-	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID})
+	  KNO_MAX_ARGS(1)|KNO_MIN_ARGS(1),
+	  "**undocumented**",
+	  {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID})
 static lispval rocksdb_reopen_prim(lispval rocksdb)
 {
   struct KNO_ROCKSDB_CONS *db = (kno_rocksdb_cons)rocksdb;
@@ -386,11 +387,11 @@ static lispval rocksdb_reopen_prim(lispval rocksdb)
 
 
 DEFC_PRIM("rocksdb/get",rocksdb_get_prim,
-	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
-	     "**undocumented**",
-	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
-	     {"key",kno_any_type,KNO_VOID},
-	     {"opts",kno_any_type,KNO_VOID})
+	  KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
+	  "**undocumented**",
+	  {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	  {"key",kno_any_type,KNO_VOID},
+	  {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_get_prim(lispval rocksdb,lispval key,lispval opts)
 {
   struct KNO_ROCKSDB_CONS *db = (kno_rocksdb_cons)rocksdb;
@@ -445,12 +446,12 @@ static lispval rocksdb_get_prim(lispval rocksdb,lispval key,lispval opts)
 
 
 DEFC_PRIM("rocksdb/put!",rocksdb_put_prim,
-	     KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
-	     "**undocumented**",
-	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
-	     {"key",kno_any_type,KNO_VOID},
-	     {"value",kno_any_type,KNO_VOID},
-	     {"opts",kno_any_type,KNO_VOID})
+	  KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
+	  "**undocumented**",
+	  {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	  {"key",kno_any_type,KNO_VOID},
+	  {"value",kno_any_type,KNO_VOID},
+	  {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_put_prim(lispval rocksdb,lispval key,lispval value,
 				lispval opts)
 {
@@ -498,11 +499,11 @@ static lispval rocksdb_put_prim(lispval rocksdb,lispval key,lispval value,
 
 
 DEFC_PRIM("rocksdb/drop!",rocksdb_drop_prim,
-	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
-	     "**undocumented**",
-	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
-	     {"key",kno_any_type,KNO_VOID},
-	     {"opts",kno_any_type,KNO_VOID})
+	  KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
+	  "**undocumented**",
+	  {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	  {"key",kno_any_type,KNO_VOID},
+	  {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_drop_prim(lispval rocksdb,lispval key,lispval opts)
 {
   char *errmsg = NULL;
@@ -572,11 +573,11 @@ static struct ROCKSDB_KEYBUF *fetchn(struct KNO_ROCKSDB *db,int n,
 
 
 DEFC_PRIM("rocksdb/getn",rocksdb_getn_prim,
-	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
-	     "**undocumented**",
-	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
-	     {"keys",kno_vector_type,KNO_VOID},
-	     {"opts",kno_any_type,KNO_VOID})
+	  KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
+	  "**undocumented**",
+	  {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	  {"keys",kno_vector_type,KNO_VOID},
+	  {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_getn_prim(lispval rocksdb,lispval keys,lispval opts)
 {
   struct KNO_ROCKSDB_CONS *dbcons = (kno_rocksdb_cons)rocksdb;
@@ -782,14 +783,14 @@ static int prefix_get_iterfn(lispval key,
 
 
 DEFC_PRIM("rocksdb/prefix/get",rocksdb_prefix_get_prim,
-	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
-	     "(ROCKSDB/PREFIX/GET *db* *key* [*opts*]) "
-	     "returns all the key/value pairs (as packets), "
-	     "whose keys begin with the DTYPE representation of "
-	     "*key*.",
-	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
-	     {"key",kno_any_type,KNO_VOID},
-	     {"opts",kno_any_type,KNO_VOID})
+	  KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
+	  "(ROCKSDB/PREFIX/GET *db* *key* [*opts*]) "
+	  "returns all the key/value pairs (as packets), "
+	  "whose keys begin with the DTYPE representation of "
+	  "*key*.",
+	  {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	  {"key",kno_any_type,KNO_VOID},
+	  {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_prefix_get_prim(lispval rocksdb,lispval key,lispval opts)
 {
   struct KNO_ROCKSDB_CONS *dbcons = (kno_rocksdb_cons)rocksdb;
@@ -804,14 +805,14 @@ static lispval rocksdb_prefix_get_prim(lispval rocksdb,lispval key,lispval opts)
 
 
 DEFC_PRIM("rocksdb/prefix/getn",rocksdb_prefix_getn_prim,
-	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
-	     "(ROCKSDB/PREFIX/GET *db* *key* [*opts*]) "
-	     "returns all the key/value pairs (as packets), "
-	     "whose keys begin with the DTYPE representation of "
-	     "*key*.",
-	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
-	     {"keys",kno_vector_type,KNO_VOID},
-	     {"opts",kno_any_type,KNO_VOID})
+	  KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
+	  "(ROCKSDB/PREFIX/GET *db* *key* [*opts*]) "
+	  "returns all the key/value pairs (as packets), "
+	  "whose keys begin with the DTYPE representation of "
+	  "*key*.",
+	  {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	  {"keys",kno_vector_type,KNO_VOID},
+	  {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_prefix_getn_prim(lispval rocksdb,lispval keys,lispval opts)
 {
   struct KNO_ROCKSDB_CONS *dbcons = (kno_rocksdb_cons)rocksdb;
@@ -909,14 +910,14 @@ static int index_get_iterfn(lispval key,
 
 
 DEFC_PRIM("rocksdb/index/get",rocksdb_index_get_prim,
-	     KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
-	     "(ROCKSDB/INDEX/GET *db* *key* [*opts*]) "
-	     "gets values associated with *key* in *db*, using "
-	     "the rocksdb database as an index and options "
-	     "provided in *opts*.",
-	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
-	     {"key",kno_any_type,KNO_VOID},
-	     {"opts",kno_any_type,KNO_VOID})
+	  KNO_MAX_ARGS(3)|KNO_MIN_ARGS(2),
+	  "(ROCKSDB/INDEX/GET *db* *key* [*opts*]) "
+	  "gets values associated with *key* in *db*, using "
+	  "the rocksdb database as an index and options "
+	  "provided in *opts*.",
+	  {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	  {"key",kno_any_type,KNO_VOID},
+	  {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_index_get_prim(lispval rocksdb,lispval key,lispval opts)
 {
   struct KNO_ROCKSDB_CONS *dbcons = (kno_rocksdb_cons)rocksdb;
@@ -1045,15 +1046,15 @@ static ssize_t rocksdb_adder(struct KNO_ROCKSDB *db,lispval key,
 
 
 DEFC_PRIM("rocksdb/index/add!",rocksdb_index_add_prim,
-	     KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
-	     "(ROCKSDB/INDEX/ADD! *db* *key* *value [*opts*]) "
-	     "Saves *values* in *db*, associating them with "
-	     "*key* and using the rocksdb database as an index "
-	     "with options provided in *opts*.",
-	     {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
-	     {"key",kno_any_type,KNO_VOID},
-	     {"values",kno_any_type,KNO_VOID},
-	     {"opts",kno_any_type,KNO_VOID})
+	  KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
+	  "(ROCKSDB/INDEX/ADD! *db* *key* *value [*opts*]) "
+	  "Saves *values* in *db*, associating them with "
+	  "*key* and using the rocksdb database as an index "
+	  "with options provided in *opts*.",
+	  {"rocksdb",KNO_ROCKSDB_TYPE,KNO_VOID},
+	  {"key",kno_any_type,KNO_VOID},
+	  {"values",kno_any_type,KNO_VOID},
+	  {"opts",kno_any_type,KNO_VOID})
 static lispval rocksdb_index_add_prim(lispval rocksdb,lispval key,
 				      lispval values,lispval opts)
 {
@@ -2409,10 +2410,10 @@ static struct KNO_INDEX_HANDLER rocksdb_index_handler={
 
 
 DEFC_PRIM("rocksdb/use-pool",use_rocksdb_pool_prim,
-	     KNO_MAX_ARGS(2)|KNO_MIN_ARGS(1),
-	     "**undocumented**",
-	     {"path",kno_string_type,KNO_VOID},
-	     {"opts",kno_any_type,KNO_VOID})
+	  KNO_MAX_ARGS(2)|KNO_MIN_ARGS(1),
+	  "**undocumented**",
+	  {"path",kno_string_type,KNO_VOID},
+	  {"opts",kno_any_type,KNO_VOID})
 static lispval use_rocksdb_pool_prim(lispval path,lispval opts)
 {
   kno_pool pool = kno_open_rocksdb_pool(KNO_CSTRING(path),-1,opts);
@@ -2421,12 +2422,12 @@ static lispval use_rocksdb_pool_prim(lispval path,lispval opts)
 
 
 DEFC_PRIM("rocksdb/make-pool",make_rocksdb_pool_prim,
-	     KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
-	     "**undocumented**",
-	     {"path",kno_string_type,KNO_VOID},
-	     {"base",kno_oid_type,KNO_VOID},
-	     {"cap",kno_fixnum_type,KNO_VOID},
-	     {"opts",kno_any_type,KNO_VOID})
+	  KNO_MAX_ARGS(4)|KNO_MIN_ARGS(3),
+	  "**undocumented**",
+	  {"path",kno_string_type,KNO_VOID},
+	  {"base",kno_oid_type,KNO_VOID},
+	  {"cap",kno_fixnum_type,KNO_VOID},
+	  {"opts",kno_any_type,KNO_VOID})
 static lispval make_rocksdb_pool_prim(lispval path,lispval base,lispval cap,
 				      lispval opts)
 {
