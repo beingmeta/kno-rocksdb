@@ -1630,22 +1630,23 @@ static void recycle_rocksdb_pool(kno_pool p)
 
 /* The Rocksdb pool handler */
 
-static struct KNO_POOL_HANDLER rocksdb_pool_handler={
-  "rocksdb_pool", 1, sizeof(struct KNO_ROCKSDB_POOL), 12,
-  rocksdb_pool_close, /* close */
-  rocksdb_pool_alloc, /* alloc */
-  rocksdb_pool_fetchoid, /* fetch */
-  rocksdb_pool_fetchn, /* fetchn */
-  rocksdb_pool_getload, /* getload */
-  rocksdb_pool_lock, /* lock */
-  rocksdb_pool_unlock, /* release */
-  rocksdb_pool_commit, /* commit */
-  NULL, /* swapout */
-  rocksdb_pool_create, /* create */
-  NULL,  /* walk */
-  recycle_rocksdb_pool, /* recycle */
-  NULL  /* poolctl */
-};
+static struct KNO_POOL_HANDLER rocksdb_pool_handler=
+  {
+   "rocksdb_pool", 1, sizeof(struct KNO_ROCKSDB_POOL), 12, NULL,
+   rocksdb_pool_close, /* close */
+   rocksdb_pool_alloc, /* alloc */
+   rocksdb_pool_fetchoid, /* fetch */
+   rocksdb_pool_fetchn, /* fetchn */
+   rocksdb_pool_getload, /* getload */
+   rocksdb_pool_lock, /* lock */
+   rocksdb_pool_unlock, /* release */
+   rocksdb_pool_commit, /* commit */
+   NULL, /* swapout */
+   rocksdb_pool_create, /* create */
+   NULL,  /* walk */
+   recycle_rocksdb_pool, /* recycle */
+   NULL  /* poolctl */
+  };
 
 /* Rocksdb indexes */
 
@@ -2389,22 +2390,23 @@ static void recycle_rocksdb_index(kno_index ix)
 
 /* Initializing the index driver */
 
-static struct KNO_INDEX_HANDLER rocksdb_index_handler={
-  "rocksdb_index", 1, sizeof(struct KNO_ROCKSDB_INDEX), 14,
-  rocksdb_index_close, /* close */
-  rocksdb_index_commit, /* commit */
-  rocksdb_index_fetch, /* fetch */
-  rocksdb_index_fetchsize, /* fetchsize */
-  NULL, /* prefetch */
-  rocksdb_index_fetchn, /* fetchn */
-  rocksdb_index_fetchkeys, /* fetchkeys */
-  NULL, /* fetchinfo */
-  NULL, /* batchadd */
-  rocksdb_index_create, /* create */
-  NULL, /* walk */
-  recycle_rocksdb_index, /* recycle */
-  NULL /* indexctl */
-};
+static struct KNO_INDEX_HANDLER rocksdb_index_handler=
+  {
+   "rocksdb_index", 1, sizeof(struct KNO_ROCKSDB_INDEX), 14, NULL,
+   rocksdb_index_close, /* close */
+   rocksdb_index_commit, /* commit */
+   rocksdb_index_fetch, /* fetch */
+   rocksdb_index_fetchsize, /* fetchsize */
+   NULL, /* prefetch */
+   rocksdb_index_fetchn, /* fetchn */
+   rocksdb_index_fetchkeys, /* fetchkeys */
+   NULL, /* fetchinfo */
+   NULL, /* batchadd */
+   rocksdb_index_create, /* create */
+   NULL, /* walk */
+   recycle_rocksdb_index, /* recycle */
+   NULL /* indexctl */
+  };
 
 /* Scheme primitives */
 
