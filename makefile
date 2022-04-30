@@ -30,8 +30,7 @@ LDFLAGS		  = ${INIT_LDFLAGS} ${MODULE_LDFLAGS} ${KNO_LDFLAGS} ${XLDFLAGS}
 MKSO		  = $(CC) -shared $(CFLAGS) $(LDFLAGS) $(LIBS)
 SYSINSTALL        = /usr/bin/install -c
 MSG		  = echo
-MACLIBTOOL	  = $(CC) -dynamiclib -single_module -undefined dynamic_lookup \
-			$(LDFLAGS)
+MACLIBTOOL	  = $(CC) -dynamiclib -single_module -undefined dynamic_lookup
 
 # Meta targets
 

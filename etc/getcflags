@@ -6,7 +6,7 @@ DEFAULT_CFLAGS=
 if which pkg-config 1>/dev/null 2>/dev/null; then
     for name in ${PROBE_NAMES}; do
 	if pkg-config --exists ${name} 1>/dev/null 2>/dev/null; then
-	    pkg-config --cflags ${name} 2>/dev/null;
+	    pkg-config --cflags ${name} 2>/dev/null | sed -e 's/-std=c++11//';
 	    exit;
 	fi;
     done;
